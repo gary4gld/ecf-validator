@@ -1,8 +1,15 @@
+/**
+ * XML parsing utilities.
+ *
+ * Responsible for detecting document type and extracting key header values
+ * from the raw XML string. Does not validate — that's the validator's job.
+ */
+
 import type { InvoiceType } from './types'
 
 // ── Invoice type detection ─────────────────────────────────────────────────────
 
-/** Maps the numeric TipoeCF field value to our InvoiceType string. */
+/** Maps TipoeCF numeric string → InvoiceType */
 const TIPO_MAP: Record<string, InvoiceType> = {
   '31': 'E-31',
   '32': 'E-32',
@@ -16,72 +23,64 @@ const TIPO_MAP: Record<string, InvoiceType> = {
   '47': 'E-47',
 }
 
-/** E-32 invoices below this threshold use the summary (Resumen) flow. */
-const E32_SUMMARY_THRESHOLD = 250_000
-
 /**
- * Reads TipoeCF from the raw XML string and returns the matching InvoiceType.
- * For E-32, also checks MontoTotal to determine if it qualifies as a summary.
+ * Detects the invoice type from the raw XML string.
  *
- * We intentionally read from the raw string rather than a parsed DOM so this
- * function works even when the XML is partially malformed.
+ * Detection order:
+ *  1. If the root element is <RFCE> → E-32-R (Resumen de Factura de Consumo)
+ *  2. Otherwise expect <ECF> root and read TipoeCF for the type
+ *
+ * Note: E-32 ECF invoices with MontoTotal < RD$250,000 are classified as 'E-32'
+ * here. The threshold note (informing the user an RFCE is required) is added by
+ * the cross-field validator, not by the parser.
  */
 export function detectInvoiceType(xml: string): InvoiceType {
-  const tipoMatch = xml.match(/<TipoeCF>\s*(\d+)\s*<\/TipoeCF>/)
-  if (!tipoMatch) return 'unknown'
+  // RFCE documents have a different root element entirely
+  if (/<RFCE[\s>]/.test(xml)) return 'E-32-R'
 
-  const baseType = TIPO_MAP[tipoMatch[1]]
-  if (!baseType) return 'unknown'
+  // Standard ECF: read TipoeCF
+  const m = xml.match(/<TipoeCF>\s*(\d+)\s*<\/TipoeCF>/)
+  if (!m) return 'unknown'
 
-  if (baseType === 'E-32') {
-    // Look for MontoTotal to decide between full and summary E-32
-    const totalMatch = xml.match(/<MontoTotal>\s*([\d.,]+)\s*<\/MontoTotal>/)
-    if (totalMatch) {
-      // Normalise: remove thousands separators, accept both . and , as decimal
-      const raw = totalMatch[1].replace(/,(?=\d{3})/g, '')
-      const total = parseFloat(raw)
-      if (!isNaN(total) && total < E32_SUMMARY_THRESHOLD) {
-        return 'E-32-R'
-      }
-    }
-  }
-
-  return baseType
+  return TIPO_MAP[m[1]] ?? 'unknown'
 }
 
-// ── Signature detection ────────────────────────────────────────────────────────
+// ── Field extractors ──────────────────────────────────────────────────────────
 
-/**
- * Returns true if the XML contains any recognisable signature element.
- * We check several possible marker elements rather than a single one to be
- * resilient to minor variation in where the signature block appears.
- */
+function getValue(field: string, xml: string): string | null {
+  const m = xml.match(new RegExp(`<${field}[^>]*>([^<]+)</${field}>`))
+  return m ? m[1].trim() : null
+}
+
+/** Returns true if the XML contains a digital signature block. */
 export function hasSignature(xml: string): boolean {
   return (
-    xml.includes('<FirmaDigital') ||
-    xml.includes('<DigestValue') ||
-    xml.includes('<SignatureValue') ||
     xml.includes('<ds:Signature') ||
-    xml.includes('<Signature ')
+    xml.includes('<Signature ') ||
+    xml.includes('<FirmaDigital') ||
+    xml.includes('<SignatureValue')
   )
 }
 
-// ── RNC extraction ─────────────────────────────────────────────────────────────
-
-/** Extracts the emitter RNC from the raw XML, or null if not found. */
+/** Extracts RNCEmisor value, or null if absent. */
 export function extractRncEmisor(xml: string): string | null {
-  const match = xml.match(/<RNCEmisor>\s*(\d+)\s*<\/RNCEmisor>/)
-  return match ? match[1].trim() : null
+  return getValue('RNCEmisor', xml)
 }
 
-/** Extracts the buyer RNC from the raw XML, or null if not present. */
+/** Extracts RNCComprador value, or null if absent. */
 export function extractRncComprador(xml: string): string | null {
-  const match = xml.match(/<RNCComprador>\s*(\d+)\s*<\/RNCComprador>/)
-  return match ? match[1].trim() : null
+  return getValue('RNCComprador', xml)
 }
 
-/** Extracts the eNCF (fiscal number) from the raw XML, or null if not found. */
+/** Extracts eNCF value, or null if absent. */
 export function extractEncf(xml: string): string | null {
-  const match = xml.match(/<eNCF>\s*([A-Z]\d+)\s*<\/eNCF>/)
-  return match ? match[1].trim() : null
+  return getValue('eNCF', xml)
+}
+
+/** Extracts MontoTotal as a number, or null if absent/unparseable. */
+export function extractMontoTotal(xml: string): number | null {
+  const v = getValue('MontoTotal', xml)
+  if (!v) return null
+  const n = parseFloat(v.replace(/,/g, ''))
+  return isNaN(n) ? null : n
 }
