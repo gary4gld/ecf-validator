@@ -1,0 +1,276 @@
+/**
+ * Cross-field validation rules.
+ *
+ * These rules require looking at multiple fields simultaneously and cannot
+ * be expressed as simple per-field format checks. They capture business
+ * logic from the DGII documentation that goes beyond what the XSD schemas
+ * can enforce structurally.
+ */
+
+import type { InvoiceType, ValidationIssue, XmlLine } from '../types'
+import { ENCF_PREFIXES, E32_RFCE_THRESHOLD } from './schema-types'
+
+let _crossCounter = 0
+function nextId(): string {
+  return `cross-${++_crossCounter}`
+}
+
+function findLine(pattern: RegExp, lines: XmlLine[]): number | null {
+  for (const l of lines) {
+    if (pattern.test(l.content)) return l.number
+  }
+  return null
+}
+
+function getValue(field: string, xml: string): string | null {
+  const m = xml.match(new RegExp(`<${field}[^>]*>([^<]+)</${field}>`))
+  return m ? m[1].trim() : null
+}
+
+// ── eNCF prefix vs TipoeCF ────────────────────────────────────────────────────
+
+/**
+ * The first 3 characters of the eNCF must match the document type.
+ * E.g. TipoeCF = 31 → eNCF must start with "E31".
+ * This is a DGII business rule, not enforced in the XSD schema itself.
+ */
+export function checkEncfTipoMismatch(
+  xml: string,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  const tipo = getValue('TipoeCF', xml)
+  const encf = getValue('eNCF', xml)
+  if (!tipo || !encf || encf.length < 3) return null
+
+  const expectedPrefix = ENCF_PREFIXES[tipo]
+  if (!expectedPrefix) return null // unknown type
+
+  const actualPrefix = encf.substring(0, 3).toUpperCase()
+  if (actualPrefix !== expectedPrefix) {
+    return {
+      id: nextId(),
+      severity: 'red',
+      field: 'eNCF',
+      line: findLine(/<eNCF>/, lines),
+      message: `eNCF no coincide con TipoeCF: el documento es tipo ${tipo} pero el eNCF comienza con "${encf.substring(0, 3)}" en lugar de "${expectedPrefix}". DGII rechazará esta combinación.`,
+    }
+  }
+  return null
+}
+
+// ── Digital signature notes ───────────────────────────────────────────────────
+
+/**
+ * Checks whether a digital signature block is present.
+ * Missing signature is informational — the document may be pre-signing.
+ * We look for common signature element names used in the Dominican PKI.
+ */
+export function checkSignaturePresence(
+  xml: string,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  const hasSignature =
+    xml.includes('<ds:Signature') ||
+    xml.includes('<Signature ') ||
+    xml.includes('<FirmaDigital') ||
+    xml.includes('<SignatureValue')
+
+  if (!hasSignature) {
+    return {
+      id: nextId(),
+      severity: 'blue',
+      field: 'Firma digital',
+      line: null,
+      message:
+        'No se detectó un bloque de firma digital. Si este documento va a ser enviado a DGII, debe estar firmado con un certificado digital válido emitido por un PSC autorizado.',
+    }
+  }
+  return null
+}
+
+// ── E-32 RFCE threshold note ──────────────────────────────────────────────────
+
+/**
+ * E-32 invoices with MontoTotal below RD$250,000 must also submit an RFCE
+ * (Resumen de Factura de Consumo Electrónica) to fc.dgii.gov.do.
+ */
+export function checkE32RfceRequirement(
+  xml: string,
+  invoiceType: InvoiceType,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  if (invoiceType !== 'E-32') return null
+
+  const montoStr = getValue('MontoTotal', xml)
+  if (!montoStr) return null
+
+  const monto = parseFloat(montoStr.replace(/,/g, ''))
+  if (isNaN(monto)) return null
+
+  if (monto < E32_RFCE_THRESHOLD) {
+    return {
+      id: nextId(),
+      severity: 'blue',
+      field: 'MontoTotal',
+      line: findLine(/<MontoTotal>/, lines),
+      message: `MontoTotal (${montoStr}) es menor a RD$${E32_RFCE_THRESHOLD.toLocaleString()}. Esta factura de consumo requiere un RFCE (Resumen de Factura de Consumo Electrónica) adicional, que debe enviarse a fc.dgii.gov.do después de recibir respuesta de ecf.dgii.gov.do.`,
+    }
+  }
+  return null
+}
+
+// ── RFCE: CodigoSeguridadeCF source reminder ──────────────────────────────────
+
+/**
+ * Informational note reminding how the CodigoSeguridadeCF should be derived.
+ * Only shown when the field is present (format errors are handled separately).
+ */
+export function checkRfceCodigoNote(
+  xml: string,
+  invoiceType: InvoiceType,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  if (invoiceType !== 'E-32-R') return null
+
+  const codigo = getValue('CodigoSeguridadeCF', xml)
+  if (!codigo) return null // missing is caught by required-fields
+
+  return {
+    id: nextId(),
+    severity: 'blue',
+    field: 'CodigoSeguridadeCF',
+    line: findLine(/<CodigoSeguridadeCF>/, lines),
+    message: `CodigoSeguridadeCF detectado (${codigo.length} chars). Recuerda: este valor debe ser los primeros 6 caracteres del SignatureValue de la firma del e-CF de consumo original, no del RFCE.`,
+  }
+}
+
+// ── FechaHoraFirma — conditional on signature ─────────────────────────────────
+
+/**
+ * FechaHoraFirma is required on all final signed documents, but for a
+ * pre-signature XML it won't exist yet. The check is therefore conditional:
+ *
+ *   No signature + no FechaHoraFirma → blue note (expected for pre-signing)
+ *   Signature present + no FechaHoraFirma → red error (must be set before signing)
+ *   FechaHoraFirma present → format is validated separately in format-checks.ts
+ */
+export function checkFechaHoraFirma(
+  xml: string,
+  invoiceType: InvoiceType,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  // RFCE documents do not have a FechaHoraFirma element in their schema
+  if (invoiceType === 'E-32-R') return null
+
+  const hasFecha = /<FechaHoraFirma>/.test(xml)
+  if (hasFecha) return null // format validated separately
+
+  const hasSig =
+    xml.includes('<ds:Signature') ||
+    xml.includes('<Signature ') ||
+    xml.includes('<FirmaDigital') ||
+    xml.includes('<SignatureValue')
+
+  if (hasSig) {
+    // Signed document without the timestamp — real error
+    return {
+      id: nextId(),
+      severity: 'red',
+      field: 'FechaHoraFirma',
+      line: null,
+      message:
+        'FechaHoraFirma está ausente en un documento que ya tiene firma digital. Este campo es obligatorio y debe indicar la fecha/hora en que se aplicó la firma (formato: DD-MM-YYYY HH:MM:SS, zona GMT-4).',
+    }
+  } else {
+    // Pre-signature — informational only
+    return {
+      id: nextId(),
+      severity: 'blue',
+      field: 'FechaHoraFirma',
+      line: null,
+      message:
+        'FechaHoraFirma no está presente. Esto es esperado en documentos pre-firma. Antes de firmar, debes agregar la fecha y hora exacta de la firma en formato DD-MM-YYYY HH:MM:SS (zona horaria GMT-4).',
+    }
+  }
+}
+
+
+
+/** The only valid version value in all DGII schemas is "1.0". */
+export function checkVersion(xml: string, lines: XmlLine[]): ValidationIssue | null {
+  const v = getValue('Version', xml)
+  if (!v) return null
+
+  if (v.trim() !== '1.0') {
+    return {
+      id: nextId(),
+      severity: 'red',
+      field: 'Version',
+      line: findLine(/<Version>/, lines),
+      message: `Version inválida: "${v}". El único valor permitido en todos los esquemas DGII es "1.0".`,
+    }
+  }
+  return null
+}
+
+/** Reset the cross-field issue ID counter (call at start of each validation run). */
+export function resetCrossCounter(): void {
+  _crossCounter = 0
+}
+
+// ── Forbidden field checks ────────────────────────────────────────────────────
+
+/**
+ * Some fields/sections do not exist in certain invoice type schemas.
+ * If they appear in the XML, DGII will reject the document because
+ * xs:sequence is strictly validated — unexpected elements are not allowed.
+ */
+export function checkForbiddenFields(
+  xml: string,
+  invoiceType: InvoiceType,
+  lines: XmlLine[]
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+  const push = (issue: ValidationIssue | null) => { if (issue) issues.push(issue) }
+
+  // E-43: Comprador section does not exist in the schema at all
+  if (invoiceType === 'E-43' && /<Comprador>/.test(xml)) {
+    push({
+      id: nextId(),
+      severity: 'red',
+      field: 'Comprador',
+      line: findLine(/<Comprador>/, lines),
+      message: 'La sección Comprador no existe en el esquema de E-43 (Gastos Menores). Su presencia causará rechazo por DGII. Este tipo de comprobante no registra datos del comprador.',
+    })
+  }
+
+  // E-32 and E-34: FechaVencimientoSecuencia is not defined in their schemas
+  if (
+    (invoiceType === 'E-32' || invoiceType === 'E-34') &&
+    /<FechaVencimientoSecuencia>/.test(xml)
+  ) {
+    push({
+      id: nextId(),
+      severity: 'red',
+      field: 'FechaVencimientoSecuencia',
+      line: findLine(/<FechaVencimientoSecuencia>/, lines),
+      message: `FechaVencimientoSecuencia no forma parte del esquema ${invoiceType}. Su presencia causará rechazo por DGII. Este campo solo aplica a E-31, E-33, E-41, E-43, E-44, E-45, E-46 y E-47.`,
+    })
+  }
+
+  // E-41, E-43, E-47: TipoIngresos is not defined in their schemas
+  if (
+    ['E-41', 'E-43', 'E-47'].includes(invoiceType) &&
+    /<TipoIngresos>/.test(xml)
+  ) {
+    push({
+      id: nextId(),
+      severity: 'red',
+      field: 'TipoIngresos',
+      line: findLine(/<TipoIngresos>/, lines),
+      message: `TipoIngresos no forma parte del esquema ${invoiceType}. Su presencia causará rechazo por DGII. Este campo no aplica a comprobantes de compras, gastos menores ni pagos al exterior.`,
+    })
+  }
+
+  return issues
+}
