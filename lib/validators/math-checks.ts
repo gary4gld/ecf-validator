@@ -264,15 +264,15 @@ export function checkValorPagar(
   const valorPagar = getNum('ValorPagar', xml)
   if (valorPagar === null) return null
 
-  const montoTotal       = getNum('MontoTotal', xml) ?? 0
-  const saldoAnterior    = getNum('SaldoAnterior', xml) ?? 0
-  const avancePago       = getNum('MontoAvancePago', xml) ?? 0
-  const itbisRetenido    = getNum('TotalITBISRetenido', xml) ?? 0
-  const isrRetencion     = getNum('TotalISRRetencion', xml) ?? 0
+  const montoTotal    = getNum('MontoTotal', xml) ?? 0
+  const saldoAnterior = getNum('SaldoAnterior', xml) ?? 0
+  const avancePago    = getNum('MontoAvancePago', xml) ?? 0
 
-  const expected = round2(
-    montoTotal + saldoAnterior - avancePago - itbisRetenido - isrRetencion
-  )
+  // Formula from DGII Formato PDF page 26, field 115:
+  //   ValorPagar = MontoTotal - MontoAvancePago ± SaldoAnterior
+  // SaldoAnterior type is NegativoPositivo, so adding it as-is handles both signs.
+  // TotalITBISRetenido and TotalISRRetencion are NOT part of this formula per DGII.
+  const expected = round2(montoTotal - avancePago + saldoAnterior)
 
   if (!approxEqual(valorPagar, expected)) {
     return {
@@ -280,7 +280,7 @@ export function checkValorPagar(
       severity: 'orange',
       field: 'ValorPagar',
       line: findLine(/<ValorPagar>/, lines),
-      message: `ValorPagar (${fmt(valorPagar)}) no coincide con el cálculo esperado: MontoTotal (${fmt(montoTotal)}) + SaldoAnterior (${fmt(saldoAnterior)}) - MontoAvancePago (${fmt(avancePago)}) - TotalITBISRetenido (${fmt(itbisRetenido)}) - TotalISRRetencion (${fmt(isrRetencion)}) = ${fmt(expected)}. Diferencia: ${fmt(Math.abs(valorPagar - expected))} DOP.`,
+      message: `ValorPagar (${fmt(valorPagar)}) no coincide con la fórmula DGII: MontoTotal (${fmt(montoTotal)}) - MontoAvancePago (${fmt(avancePago)}) + SaldoAnterior (${fmt(saldoAnterior)}) = ${fmt(expected)}. Diferencia: ${fmt(Math.abs(valorPagar - expected))} DOP.`,
     }
   }
   return null
