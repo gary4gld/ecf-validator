@@ -47,6 +47,18 @@ import {
   checkMontoTotal,
   checkValorPagar,
 } from './math-checks'
+import {
+  resetCondCounter,
+  checkFechaLimitePago,
+  checkITBISTriplets,
+  checkTotalITBISPresence,
+  checkOtraMoneda,
+  checkE32BuyerIdentification,
+  checkFormaPagoBonos,
+  checkITBISForbiddenTypes,
+  checkE46ITBISRates,
+  checkMontoPago,
+} from './conditional-checks'
 
 // ── Severity sort order ────────────────────────────────────────────────────────
 
@@ -154,6 +166,28 @@ function runCrossFieldChecks(parsed: ParsedXml): ValidationIssue[] {
   return issues
 }
 
+// ── Conditional field checks ──────────────────────────────────────────────────
+
+function runConditionalChecks(parsed: ParsedXml): ValidationIssue[] {
+  const { raw: xml, lines, invoiceType } = parsed
+  const issues: ValidationIssue[] = []
+
+  const push = (issue: ValidationIssue | null) => { if (issue) issues.push(issue) }
+  const pushAll = (list: ValidationIssue[]) => issues.push(...list)
+
+  push(checkFechaLimitePago(xml, invoiceType, lines))
+  pushAll(checkITBISTriplets(xml, lines))
+  push(checkTotalITBISPresence(xml, lines))
+  pushAll(checkOtraMoneda(xml, lines))
+  pushAll(checkE32BuyerIdentification(xml, invoiceType, lines))
+  push(checkFormaPagoBonos(xml, invoiceType, lines))
+  pushAll(checkITBISForbiddenTypes(xml, invoiceType, lines))
+  pushAll(checkE46ITBISRates(xml, invoiceType, lines))
+  push(checkMontoPago(xml, lines))
+
+  return issues
+}
+
 // ── Math checks ───────────────────────────────────────────────────────────────
 
 function runMathChecks(parsed: ParsedXml): ValidationIssue[] {
@@ -183,11 +217,13 @@ export function validate(parsed: ParsedXml): ValidationIssue[] {
   resetFormatCounter()
   resetCrossCounter()
   resetMathCounter()
+  resetCondCounter()
 
   const issues: ValidationIssue[] = [
     ...runRequiredChecks(parsed),
     ...runFormatChecks(parsed),
     ...runCrossFieldChecks(parsed),
+    ...runConditionalChecks(parsed),
     ...runMathChecks(parsed),
   ]
 
