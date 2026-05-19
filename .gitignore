@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local AI / dev notes
+CLAUDE.md
+app/CLAUDE.md
+VALIDATION_LIMITATIONS.md
+app/VALIDATION_LIMITATIONS.md
