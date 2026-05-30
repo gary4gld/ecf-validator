@@ -28,6 +28,17 @@ import {
   validateCodigoSeguridadeCF,
   validateTipoIngresos,
   validateDecimalSeparators,
+  validateITBISRateValues,
+  validateTipoeCF,
+  validateTipoPagoValue,
+  validateIndicadorMontoGravado,
+  validateIndicadorEnvioDiferido,
+  validateTipoCuentaPago,
+  validateTipoAjuste,
+  validateCodigoModificacion,
+  validateFormaPagoValues,
+  validateIndicadorNotaCredito,
+  validateIndicadorAgenteRetencion,
 } from './format-checks'
 import {
   resetCrossCounter,
@@ -38,6 +49,9 @@ import {
   checkVersion,
   checkFechaHoraFirma,
   checkForbiddenFields,
+  checkIndicadorNotaCreditoDate,
+  checkFechaHoraFirmaConsistency,
+  checkNCFModificadoPrefix,
 } from './cross-field-rules'
 import {
   resetMathCounter,
@@ -47,6 +61,10 @@ import {
   checkMontoTotal,
   checkValorPagar,
 } from './math-checks'
+import {
+  resetSeqCounter,
+  runSequenceChecks,
+} from './sequence-checks'
 import {
   resetCondCounter,
   checkFechaLimitePago,
@@ -143,6 +161,21 @@ function runFormatChecks(parsed: ParsedXml): ValidationIssue[] {
   // RFCE: CodigoSeguridadeCF format
   push(validateCodigoSeguridadeCF(xml, lines))
 
+  // ITBIS rate values — fixed by law (18, 16, 0)
+  pushAll(validateITBISRateValues(xml, lines))
+
+  // Coded field enum validations
+  push(validateTipoeCF(xml, lines))
+  push(validateTipoPagoValue(xml, lines))
+  push(validateIndicadorMontoGravado(xml, lines))
+  push(validateIndicadorEnvioDiferido(xml, lines))
+  push(validateTipoCuentaPago(xml, lines))
+  pushAll(validateTipoAjuste(xml, lines))
+  push(validateCodigoModificacion(xml, lines))
+  pushAll(validateFormaPagoValues(xml, lines))
+  push(validateIndicadorNotaCredito(xml, lines))
+  pushAll(validateIndicadorAgenteRetencion(xml, lines))
+
   return issues
 }
 
@@ -162,6 +195,9 @@ function runCrossFieldChecks(parsed: ParsedXml): ValidationIssue[] {
   push(checkE32RfceRequirement(xml, invoiceType, lines))
   push(checkRfceCodigoNote(xml, invoiceType, lines))
   pushAll(checkForbiddenFields(xml, invoiceType, lines))
+  push(checkIndicadorNotaCreditoDate(xml, invoiceType, lines))
+  push(checkFechaHoraFirmaConsistency(xml, lines))
+  push(checkNCFModificadoPrefix(xml, invoiceType, lines))
 
   return issues
 }
@@ -218,6 +254,7 @@ export function validate(parsed: ParsedXml): ValidationIssue[] {
   resetCrossCounter()
   resetMathCounter()
   resetCondCounter()
+  resetSeqCounter()
 
   const issues: ValidationIssue[] = [
     ...runRequiredChecks(parsed),
@@ -225,6 +262,7 @@ export function validate(parsed: ParsedXml): ValidationIssue[] {
     ...runCrossFieldChecks(parsed),
     ...runConditionalChecks(parsed),
     ...runMathChecks(parsed),
+    ...runSequenceChecks(parsed.raw, parsed.invoiceType, parsed.lines),
   ]
 
   // Deduplicate by field+message (in case a field triggers both required and format)

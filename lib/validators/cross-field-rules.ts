@@ -213,7 +213,142 @@ export function checkVersion(xml: string, lines: XmlLine[]): ValidationIssue | n
   return null
 }
 
-/** Reset the cross-field issue ID counter (call at start of each validation run). */
+// ── IndicadorNotaCredito date validation (E-34 only) ─────────────────────────
+
+/**
+ * IndicadorNotaCredito must match the actual elapsed time between the original
+ * invoice date (FechaNCFModificado) and the current note's FechaEmision:
+ *
+ *   ≤ 30 calendar days → IndicadorNotaCredito must be 0
+ *   > 30 calendar days → IndicadorNotaCredito must be 1
+ *
+ * This is fiscally significant:
+ *   - Value 0 (≤ 30 days): the note can deduct ITBIS
+ *   - Value 1 (> 30 days): the note has NO right to deduct ITBIS
+ *
+ * Both dates are in DD-MM-YYYY format per DGII schema.
+ */
+export function checkIndicadorNotaCreditoDate(
+  xml: string,
+  invoiceType: InvoiceType,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  if (invoiceType !== 'E-34') return null
+
+  const indicador = getValue('IndicadorNotaCredito', xml)
+  const fechaNCF  = getValue('FechaNCFModificado', xml)
+  const fechaEmision = getValue('FechaEmision', xml)
+
+  if (!indicador || !fechaNCF || !fechaEmision) return null
+
+  // Parse DD-MM-YYYY into a Date object
+  function parseDGIIDate(s: string): Date | null {
+    const m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/)
+    if (!m) return null
+    return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]))
+  }
+
+  const original = parseDGIIDate(fechaNCF)
+  const emision  = parseDGIIDate(fechaEmision)
+  if (!original || !emision) return null
+
+  const diffMs   = emision.getTime() - original.getTime()
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+  const expectedIndicador = diffDays > 30 ? '1' : '0'
+  const actualIndicador   = indicador.trim()
+
+  if (actualIndicador !== expectedIndicador) {
+    const daysLabel = diffDays === 1 ? '1 día' : `${diffDays} días`
+    const fiscal = expectedIndicador === '0'
+      ? 'con derecho a rebajar ITBIS'
+      : 'SIN derecho a rebajar ITBIS'
+
+    return {
+      id: nextId(),
+      severity: 'red',
+      field: 'IndicadorNotaCredito',
+      line: findLine(/<IndicadorNotaCredito>/, lines),
+      message: `IndicadorNotaCredito incorrecto: el valor es "${actualIndicador}" pero debería ser "${expectedIndicador}". Han transcurrido ${daysLabel} entre FechaNCFModificado (${fechaNCF}) y FechaEmision (${fechaEmision}). Esta nota de crédito es ${fiscal}.`,
+    }
+  }
+
+  return null
+}
+
+// ── FechaHoraFirma vs FechaEmision consistency ────────────────────────────────
+
+/**
+ * FechaHoraFirma must be >= FechaEmision.
+ * A signing timestamp before the invoice emission date is physically impossible.
+ */
+export function checkFechaHoraFirmaConsistency(
+  xml: string,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  const firmaRaw   = getValue('FechaHoraFirma', xml)
+  const emisionRaw = getValue('FechaEmision', xml)
+  if (!firmaRaw || !emisionRaw) return null
+
+  function parseDGIIDate(s: string): Date | null {
+    const m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/)
+    if (!m) return null
+    return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]))
+  }
+
+  const firma   = parseDGIIDate(firmaRaw)
+  const emision = parseDGIIDate(emisionRaw)
+  if (!firma || !emision) return null
+
+  if (firma < emision) {
+    return {
+      id: nextId(),
+      severity: 'red',
+      field: 'FechaHoraFirma',
+      line: findLine(/<FechaHoraFirma>/, lines),
+      message: `FechaHoraFirma (${firmaRaw}) es anterior a FechaEmision (${emisionRaw}). Es físicamente imposible firmar un documento antes de emitirlo. Verifica que ambas fechas sean correctas.`,
+    }
+  }
+  return null
+}
+
+// ── NCFModificado prefix validation ───────────────────────────────────────────
+
+/**
+ * NCFModificado (inside InformacionReferencia for E-33/34) must reference a valid
+ * invoice type prefix. E.g. "E480000000013" is invalid — type 48 does not exist.
+ * Old-style NCF prefixes (B01–B16) are also valid when modifying paper invoices.
+ */
+export function checkNCFModificadoPrefix(
+  xml: string,
+  invoiceType: InvoiceType,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  if (invoiceType !== 'E-33' && invoiceType !== 'E-34') return null
+
+  const ncf = getValue('NCFModificado', xml)
+  if (!ncf) return null
+
+  const validPrefixes = new Set([
+    'E31','E32','E33','E34','E41','E43','E44','E45','E46','E47',
+    'B01','B02','B03','B04','B11','B12','B13','B14','B15','B16',
+  ])
+
+  if (ncf.length >= 3) {
+    const prefix = ncf.substring(0, 3).toUpperCase()
+    if (prefix.startsWith('E') && !validPrefixes.has(prefix)) {
+      return {
+        id: nextId(),
+        severity: 'red',
+        field: 'NCFModificado',
+        line: findLine(/<NCFModificado>/, lines),
+        message: `NCFModificado "${ncf}" referencia el tipo "${prefix}" que no existe. Prefijos e-CF válidos: E31, E32, E33, E34, E41, E43, E44, E45, E46, E47. Si modifica un NCF anterior en papel, use el formato B01–B16.`,
+      }
+    }
+  }
+  return null
+}
+
 export function resetCrossCounter(): void {
   _crossCounter = 0
 }
@@ -269,6 +404,17 @@ export function checkForbiddenFields(
       field: 'TipoIngresos',
       line: findLine(/<TipoIngresos>/, lines),
       message: `TipoIngresos no forma parte del esquema ${invoiceType}. Su presencia causará rechazo por DGII. Este campo no aplica a comprobantes de compras, gastos menores ni pagos al exterior.`,
+    })
+  }
+
+  // E-47: RNCComprador is not in the E-47 schema — recipients are non-resident foreigners
+  if (invoiceType === 'E-47' && /<RNCComprador>/.test(xml)) {
+    issues.push({
+      id: nextId(),
+      severity: 'red',
+      field: 'RNCComprador',
+      line: findLine(/<RNCComprador>/, lines),
+      message: 'RNCComprador no existe en el esquema de E-47 (Pagos al Exterior). Los destinatarios son personas físicas o jurídicas no residentes que no tienen RNC dominicano. Usar IdentificadorExtranjero para identificarlos.',
     })
   }
 

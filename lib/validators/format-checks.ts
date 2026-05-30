@@ -45,11 +45,58 @@ function getValues(field: string, xml: string): string[] {
 
 // ── RNC format ────────────────────────────────────────────────────────────────
 
+/**
+ * Validates a 9-digit RNC (Persona Jurídica) using the DGII checksum algorithm.
+ *
+ * Algorithm (confirmed from DGII documentation):
+ *   Weights: [7, 9, 8, 6, 5, 4, 3, 2] applied to digits 1–8
+ *   Sum = Σ(digit × weight)
+ *   R   = Sum mod 11
+ *   Check digit = 11 - R
+ *     → If check digit = 10: actual check digit is 1
+ *     → If check digit = 11: actual check digit is 0
+ *   The 9th digit must equal the computed check digit.
+ */
+function validateRNC9Checksum(rnc: string): boolean {
+  const weights = [7, 9, 8, 6, 5, 4, 3, 2]
+  const digits = rnc.split('').map(Number)
+  const sum = digits.slice(0, 8).reduce((acc, d, i) => acc + d * weights[i], 0)
+  const r = sum % 11
+  let check = 11 - r
+  if (check === 10) check = 1
+  if (check === 11) check = 0
+  return digits[8] === check
+}
+
+/**
+ * Validates an 11-digit RNC (Persona Física / Cédula) using the Luhn algorithm (mod 10).
+ *
+ * Standard Luhn:
+ *   Starting from the rightmost digit, double every second digit.
+ *   If doubling produces > 9, subtract 9.
+ *   Sum all digits — if divisible by 10, the number is valid.
+ */
+function validateLuhn(number: string): boolean {
+  let sum = 0
+  let isEven = false
+  for (let i = number.length - 1; i >= 0; i--) {
+    let digit = parseInt(number[i], 10)
+    if (isEven) {
+      digit *= 2
+      if (digit > 9) digit -= 9
+    }
+    sum += digit
+    isEven = !isEven
+  }
+  return sum % 10 === 0
+}
+
 function checkRnc(
   field: string,
   value: string,
   line: number | null
 ): ValidationIssue | null {
+  // Structural check first (9 or 11 digits)
   if (!PATTERNS.RNC.test(value)) {
     return {
       id: nextId(),
@@ -59,6 +106,24 @@ function checkRnc(
       message: `${field} tiene formato inválido: "${value}". Debe ser 9 u 11 dígitos numéricos.`,
     }
   }
+
+  // Checksum check
+  const isValid = value.length === 9
+    ? validateRNC9Checksum(value)
+    : validateLuhn(value)
+
+  if (!isValid) {
+    const type = value.length === 9 ? 'RNC de Persona Jurídica (9 dígitos)' : 'Cédula de Persona Física (11 dígitos)'
+    const algo = value.length === 9 ? 'pesos DGII [7,9,8,6,5,4,3,2] mod 11' : 'algoritmo Luhn mod 10'
+    return {
+      id: nextId(),
+      severity: 'red',
+      field,
+      line,
+      message: `${field} "${value}" tiene dígito verificador inválido (${type}). El número no supera la validación de ${algo}. Verifica que no haya dígitos transpuestos o errores de tipeo.`,
+    }
+  }
+
   return null
 }
 
@@ -243,6 +308,259 @@ export function validateCodigoSeguridadeCF(xml: string, lines: XmlLine[]): Valid
 /** Reset the issue ID counter (call at start of each validation run). */
 export function resetFormatCounter(): void {
   _issueCounter = 0
+}
+
+// ── ITBIS rate value checks ───────────────────────────────────────────────────
+
+/**
+ * ITBIS1, ITBIS2, ITBIS3 are fixed by Dominican tax law — they are not
+ * configurable by the emitter. The XSD only constrains them to 1-2 digit
+ * integers; the fixed-value rule is enforced at the DGII application layer.
+ *
+ *   ITBIS1 = 18  (tasa general 18%)
+ *   ITBIS2 = 16  (tasa reducida 16%)
+ *   ITBIS3 = 0   (tasa cero 0%)
+ *
+ * A wrong value produces incorrect TotalITBIS math AND signals a misunderstanding
+ * of the tax structure. We flag the root cause directly rather than just the
+ * downstream math discrepancy.
+ */
+export function validateITBISRateValues(xml: string, lines: XmlLine[]): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+
+  const checks: Array<{ field: string; expected: number; label: string }> = [
+    { field: 'ITBIS1', expected: 18, label: 'tasa general (18%)' },
+    { field: 'ITBIS2', expected: 16, label: 'tasa reducida (16%)' },
+    { field: 'ITBIS3', expected: 0,  label: 'tasa cero (0%)' },
+  ]
+
+  for (const { field, expected, label } of checks) {
+    const v = getValue(field, xml)
+    if (!v) continue
+    const n = parseInt(v, 10)
+    if (isNaN(n) || n !== expected) {
+      issues.push({
+        id: nextId(),
+        severity: 'red',
+        field,
+        line: findLine(new RegExp(`<${field}>`), lines),
+        message: `${field} tiene valor inválido: "${v}". Este campo representa la ${label} del ITBIS, la cual está fijada por ley y debe ser siempre ${expected}. No es un valor configurable por el emisor.`,
+      })
+    }
+  }
+
+  return issues
+}
+
+// ── Coded field enum validations ──────────────────────────────────────────────
+
+/**
+ * TipoeCF must be one of the 10 valid invoice type codes.
+ * An invalid code means the document cannot be routed or processed by DGII.
+ * Note: type detection already marks this as "unknown" in the UI badge,
+ * but we also need an explicit validation error card.
+ */
+export function validateTipoeCF(xml: string, lines: XmlLine[]): ValidationIssue | null {
+  const v = getValue('TipoeCF', xml)
+  if (!v) return null
+  const valid = new Set(['31','32','33','34','41','43','44','45','46','47'])
+  if (!valid.has(v.trim())) {
+    return {
+      id: nextId(),
+      severity: 'red',
+      field: 'TipoeCF',
+      line: findLine(/<TipoeCF>/, lines),
+      message: `TipoeCF tiene un valor inválido: "${v}". Los únicos valores permitidos son: 31, 32, 33, 34, 41, 43, 44, 45, 46, 47.`,
+    }
+  }
+  return null
+}
+
+/**
+ * TipoPago must be 1 (Contado), 2 (Crédito), or 3 (Gratuito).
+ * Note: facturas gratuitas (código 3) no son válidas para crédito fiscal.
+ */
+export function validateTipoPagoValue(xml: string, lines: XmlLine[]): ValidationIssue | null {
+  const v = getValue('TipoPago', xml)
+  if (!v) return null
+  if (!['1','2','3'].includes(v.trim())) {
+    return {
+      id: nextId(),
+      severity: 'red',
+      field: 'TipoPago',
+      line: findLine(/<TipoPago>/, lines),
+      message: `TipoPago tiene valor inválido: "${v}". Valores válidos: 1 (Contado), 2 (Crédito), 3 (Gratuito).`,
+    }
+  }
+  return null
+}
+
+/**
+ * IndicadorMontoGravado must be 0 or 1.
+ *   0: item prices do NOT include ITBIS
+ *   1: item prices already include ITBIS
+ */
+export function validateIndicadorMontoGravado(xml: string, lines: XmlLine[]): ValidationIssue | null {
+  const v = getValue('IndicadorMontoGravado', xml)
+  if (!v) return null
+  if (!['0','1'].includes(v.trim())) {
+    return {
+      id: nextId(),
+      severity: 'red',
+      field: 'IndicadorMontoGravado',
+      line: findLine(/<IndicadorMontoGravado>/, lines),
+      message: `IndicadorMontoGravado tiene valor inválido: "${v}". Valores válidos: 0 (precios sin ITBIS incluido), 1 (precios con ITBIS incluido).`,
+    }
+  }
+  return null
+}
+
+/**
+ * IndicadorEnvioDiferido only accepts value 1 — there is no other valid value.
+ * If present, the emitter must be authorized for deferred submissions.
+ */
+export function validateIndicadorEnvioDiferido(xml: string, lines: XmlLine[]): ValidationIssue | null {
+  const v = getValue('IndicadorEnvioDiferido', xml)
+  if (!v) return null
+  if (v.trim() !== '1') {
+    return {
+      id: nextId(),
+      severity: 'red',
+      field: 'IndicadorEnvioDiferido',
+      line: findLine(/<IndicadorEnvioDiferido>/, lines),
+      message: `IndicadorEnvioDiferido tiene valor inválido: "${v}". El único valor permitido es 1 (envío diferido autorizado). Solo aplica a emisores expresamente autorizados por DGII.`,
+    }
+  }
+  return null
+}
+
+/**
+ * TipoCuentaPago must be CT (Corriente), AH (Ahorro), or OT (Otra).
+ */
+export function validateTipoCuentaPago(xml: string, lines: XmlLine[]): ValidationIssue | null {
+  const v = getValue('TipoCuentaPago', xml)
+  if (!v) return null
+  if (!['CT','AH','OT'].includes(v.trim().toUpperCase())) {
+    return {
+      id: nextId(),
+      severity: 'red',
+      field: 'TipoCuentaPago',
+      line: findLine(/<TipoCuentaPago>/, lines),
+      message: `TipoCuentaPago tiene valor inválido: "${v}". Valores válidos: CT (Cuenta Corriente), AH (Ahorro), OT (Otra).`,
+    }
+  }
+  return null
+}
+
+/**
+ * TipoAjuste must be D (Descuento) or R (Recargo).
+ */
+export function validateTipoAjuste(xml: string, lines: XmlLine[]): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+  const re = /<TipoAjuste>([^<]+)<\/TipoAjuste>/g
+  let m
+  while ((m = re.exec(xml)) !== null) {
+    const v = m[1].trim()
+    if (!['D','R'].includes(v.toUpperCase())) {
+      issues.push({
+        id: nextId(),
+        severity: 'red',
+        field: 'TipoAjuste',
+        line: findLine(new RegExp(`<TipoAjuste>${v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`), lines),
+        message: `TipoAjuste tiene valor inválido: "${v}". Valores válidos: D (Descuento), R (Recargo).`,
+      })
+    }
+  }
+  return issues
+}
+
+/**
+ * CodigoModificacion must be 1–5 (only present in E-33 and E-34).
+ *   1: Anula el NCF modificado
+ *   2: Corrige texto
+ *   3: Corrige montos
+ *   4: Reemplaza NCF emitido en contingencia
+ *   5: Referencia factura consumo electrónica
+ */
+export function validateCodigoModificacion(xml: string, lines: XmlLine[]): ValidationIssue | null {
+  const v = getValue('CodigoModificacion', xml)
+  if (!v) return null
+  if (!['1','2','3','4','5'].includes(v.trim())) {
+    return {
+      id: nextId(),
+      severity: 'red',
+      field: 'CodigoModificacion',
+      line: findLine(/<CodigoModificacion>/, lines),
+      message: `CodigoModificacion tiene valor inválido: "${v}". Valores válidos: 1 (Anula), 2 (Corrige texto), 3 (Corrige montos), 4 (Reemplaza contingencia), 5 (Referencia factura consumo).`,
+    }
+  }
+  return null
+}
+
+/**
+ * IndicadorNotaCredito is exclusive to E-34 and must be 0 or 1.
+ *   0: la fecha del e-CF afectado es ≤ 30 días calendario (nota reciente — con derecho a rebajar ITBIS)
+ *   1: la fecha del e-CF afectado es > 30 días calendario (nota tardía — sin derecho a rebajar ITBIS)
+ */
+export function validateIndicadorNotaCredito(xml: string, lines: XmlLine[]): ValidationIssue | null {
+  const v = getValue('IndicadorNotaCredito', xml)
+  if (!v) return null
+  if (!['0','1'].includes(v.trim())) {
+    return {
+      id: nextId(),
+      severity: 'red',
+      field: 'IndicadorNotaCredito',
+      line: findLine(/<IndicadorNotaCredito>/, lines),
+      message: `IndicadorNotaCredito tiene valor inválido: "${v}". Valores válidos: 0 (fecha de emisión del e-CF afectado ≤ 30 días — puede rebajar ITBIS), 1 (> 30 días — no tiene derecho a rebajar ITBIS).`,
+    }
+  }
+  return null
+}
+
+/**
+ * IndicadorAgenteRetencionoPercepcion must be 1 (Retención) or 2 (Percepción).
+ * Checks all occurrences since it can appear per item in E-41 and E-47.
+ * Note: Régimen de percepción no está vigente (footnote 52), so 2 is technically unused.
+ */
+export function validateIndicadorAgenteRetencion(xml: string, lines: XmlLine[]): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+  const re = /<IndicadorAgenteRetencionoPercepcion>([^<]+)<\/IndicadorAgenteRetencionoPercepcion>/g
+  let m
+  while ((m = re.exec(xml)) !== null) {
+    const v = m[1].trim()
+    if (!['1','2'].includes(v)) {
+      issues.push({
+        id: nextId(),
+        severity: 'red',
+        field: 'IndicadorAgenteRetencionoPercepcion',
+        line: findLine(/<IndicadorAgenteRetencionoPercepcion>/, lines),
+        message: `IndicadorAgenteRetencionoPercepcion tiene valor inválido: "${v}". Valores válidos: 1 (Retención), 2 (Percepción). Nota: el régimen de percepción no está vigente actualmente.`,
+      })
+    }
+  }
+  return issues
+}
+ /* Note: FormaPago=5 type restriction (E-32 only) is handled in conditional-checks.ts.
+ */
+export function validateFormaPagoValues(xml: string, lines: XmlLine[]): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+  if (!/<TablaFormasPago>/.test(xml)) return issues
+
+  const re = /<FormaPago>([^<]+)<\/FormaPago>/g
+  let m
+  while ((m = re.exec(xml)) !== null) {
+    const v = m[1].trim()
+    if (!['1','2','3','4','5','6','7','8'].includes(v)) {
+      issues.push({
+        id: nextId(),
+        severity: 'red',
+        field: 'FormaPago',
+        line: findLine(new RegExp(`<FormaPago>${v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`), lines),
+        message: `FormaPago tiene valor inválido: "${v}". Valores válidos: 1 (Efectivo), 2 (Cheque/Transferencia/Depósito), 3 (Tarjeta Débito/Crédito), 4 (Venta a Crédito), 5 (Bonos/Certificados), 6 (Permuta), 7 (Nota de crédito), 8 (Otras).`,
+      })
+    }
+  }
+  return issues
 }
 
 // ── TipoIngresos leading-zero check ──────────────────────────────────────────
