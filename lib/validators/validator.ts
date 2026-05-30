@@ -39,6 +39,8 @@ import {
   validateFormaPagoValues,
   validateIndicadorNotaCredito,
   validateIndicadorAgenteRetencion,
+  validateNumericPositivity,
+  validateUnidadMedida,
 } from './format-checks'
 import {
   resetCrossCounter,
@@ -52,6 +54,8 @@ import {
   checkIndicadorNotaCreditoDate,
   checkFechaHoraFirmaConsistency,
   checkNCFModificadoPrefix,
+  checkFechaVencimientoSecuencia,
+  checkFechaDesdeHasta,
 } from './cross-field-rules'
 import {
   resetMathCounter,
@@ -66,6 +70,10 @@ import {
   runSequenceChecks,
 } from './sequence-checks'
 import {
+  resetItemCounter,
+  runItemChecks,
+} from './item-checks'
+import {
   resetCondCounter,
   checkFechaLimitePago,
   checkITBISTriplets,
@@ -76,6 +84,7 @@ import {
   checkITBISForbiddenTypes,
   checkE46ITBISRates,
   checkMontoPago,
+  checkFormaPagoSum,
 } from './conditional-checks'
 
 // ── Severity sort order ────────────────────────────────────────────────────────
@@ -175,6 +184,8 @@ function runFormatChecks(parsed: ParsedXml): ValidationIssue[] {
   pushAll(validateFormaPagoValues(xml, lines))
   push(validateIndicadorNotaCredito(xml, lines))
   pushAll(validateIndicadorAgenteRetencion(xml, lines))
+  pushAll(validateNumericPositivity(xml, lines))
+  pushAll(validateUnidadMedida(xml, lines))
 
   return issues
 }
@@ -198,6 +209,8 @@ function runCrossFieldChecks(parsed: ParsedXml): ValidationIssue[] {
   push(checkIndicadorNotaCreditoDate(xml, invoiceType, lines))
   push(checkFechaHoraFirmaConsistency(xml, lines))
   push(checkNCFModificadoPrefix(xml, invoiceType, lines))
+  push(checkFechaVencimientoSecuencia(xml, lines))
+  push(checkFechaDesdeHasta(xml, lines))
 
   return issues
 }
@@ -220,6 +233,7 @@ function runConditionalChecks(parsed: ParsedXml): ValidationIssue[] {
   pushAll(checkITBISForbiddenTypes(xml, invoiceType, lines))
   pushAll(checkE46ITBISRates(xml, invoiceType, lines))
   push(checkMontoPago(xml, lines))
+  push(checkFormaPagoSum(xml, lines))
 
   return issues
 }
@@ -255,6 +269,7 @@ export function validate(parsed: ParsedXml): ValidationIssue[] {
   resetMathCounter()
   resetCondCounter()
   resetSeqCounter()
+  resetItemCounter()
 
   const issues: ValidationIssue[] = [
     ...runRequiredChecks(parsed),
@@ -263,6 +278,7 @@ export function validate(parsed: ParsedXml): ValidationIssue[] {
     ...runConditionalChecks(parsed),
     ...runMathChecks(parsed),
     ...runSequenceChecks(parsed.raw, parsed.invoiceType, parsed.lines),
+    ...runItemChecks(parsed.raw, parsed.invoiceType, parsed.lines),
   ]
 
   // Deduplicate by field+message (in case a field triggers both required and format)

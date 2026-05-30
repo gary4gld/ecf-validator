@@ -399,3 +399,49 @@ export function checkMontoPago(
 export function resetCondCounter(): void {
   _condCounter = 0
 }
+
+// ── TablaFormasPago sum = ValorPagar ──────────────────────────────────────────
+
+/**
+ * The sum of all MontoPago entries in TablaFormasPago must equal ValorPagar.
+ * If ValorPagar is absent, compare against MontoTotal instead.
+ *
+ * The payment breakdown must account for the full amount payable — a discrepancy
+ * means the forms of payment don't add up to what the customer actually owes.
+ */
+export function checkFormaPagoSum(
+  xml: string,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  if (!present('TablaFormasPago', xml)) return null
+
+  // Sum all MontoPago occurrences
+  const re = /<MontoPago>([^<]+)<\/MontoPago>/g
+  let sum = 0
+  let count = 0
+  let m
+  while ((m = re.exec(xml)) !== null) {
+    const n = parseFloat(m[1].trim())
+    if (!isNaN(n)) { sum += n; count++ }
+  }
+  if (count === 0) return null
+
+  sum = Math.round(sum * 100) / 100
+
+  // Compare against ValorPagar, fall back to MontoTotal
+  const referenceField = getNum('ValorPagar', xml) !== null ? 'ValorPagar' : 'MontoTotal'
+  const reference = getNum(referenceField, xml)
+  if (reference === null) return null
+
+  const diff = Math.abs(sum - reference)
+  if (diff > 0.02) {
+    return {
+      id: nextId(),
+      severity: 'orange',
+      field: 'MontoPago',
+      line: findLine(/<TablaFormasPago>/, lines),
+      message: `La suma de MontoPago en TablaFormasPago (${sum.toFixed(2)}) no coincide con ${referenceField} (${reference.toFixed(2)}). Diferencia: ${diff.toFixed(2)} DOP. Las formas de pago deben sumar el total a pagar.`,
+    }
+  }
+  return null
+}

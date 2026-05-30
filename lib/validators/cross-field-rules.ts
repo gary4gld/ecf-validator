@@ -276,7 +276,79 @@ export function checkIndicadorNotaCreditoDate(
   return null
 }
 
-// ── FechaHoraFirma vs FechaEmision consistency ────────────────────────────────
+// ── FechaVencimientoSecuencia > FechaEmision ─────────────────────────────────
+
+/**
+ * FechaVencimientoSecuencia must be on or after FechaEmision.
+ * An invoice can't be issued after its own sequence has expired.
+ */
+export function checkFechaVencimientoSecuencia(
+  xml: string,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  const vencRaw    = getValue('FechaVencimientoSecuencia', xml)
+  const emisionRaw = getValue('FechaEmision', xml)
+  if (!vencRaw || !emisionRaw) return null
+
+  function parseDate(s: string): Date | null {
+    const m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/)
+    if (!m) return null
+    return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]))
+  }
+
+  const venc    = parseDate(vencRaw)
+  const emision = parseDate(emisionRaw)
+  if (!venc || !emision) return null
+
+  if (venc < emision) {
+    return {
+      id: nextId(),
+      severity: 'red',
+      field: 'FechaVencimientoSecuencia',
+      line: findLine(/<FechaVencimientoSecuencia>/, lines),
+      message: `FechaVencimientoSecuencia (${vencRaw}) es anterior a FechaEmision (${emisionRaw}). No se puede emitir un comprobante con una secuencia ya vencida.`,
+    }
+  }
+  return null
+}
+
+// ── FechaDesde ≤ FechaHasta ───────────────────────────────────────────────────
+
+/**
+ * When both FechaDesde and FechaHasta are present in IdDoc (billing period),
+ * FechaDesde must be ≤ FechaHasta.
+ */
+export function checkFechaDesdeHasta(
+  xml: string,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  const desdeRaw = getValue('FechaDesde', xml)
+  const hastaRaw = getValue('FechaHasta', xml)
+  if (!desdeRaw || !hastaRaw) return null
+
+  function parseDate(s: string): Date | null {
+    const m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/)
+    if (!m) return null
+    return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]))
+  }
+
+  const desde = parseDate(desdeRaw)
+  const hasta = parseDate(hastaRaw)
+  if (!desde || !hasta) return null
+
+  if (desde > hasta) {
+    return {
+      id: nextId(),
+      severity: 'red',
+      field: 'FechaDesde',
+      line: findLine(/<FechaDesde>/, lines),
+      message: `FechaDesde (${desdeRaw}) es posterior a FechaHasta (${hastaRaw}). El período de facturación no puede terminar antes de comenzar.`,
+    }
+  }
+  return null
+}
+
+
 
 /**
  * FechaHoraFirma must be >= FechaEmision.

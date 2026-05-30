@@ -664,3 +664,87 @@ export function validateDecimalSeparators(xml: string, lines: XmlLine[]): Valida
 
   return issues
 }
+
+// ── Numeric positivity checks ─────────────────────────────────────────────────
+
+/**
+ * CantidadItem must be > 0 (MayorCero in XSD).
+ * MontoItem must be >= 0 (MayorIgualCero).
+ * PrecioUnitarioItem must be >= 0 (MayorIgualCero).
+ * Checks ALL occurrences since these repeat per item.
+ */
+export function validateNumericPositivity(xml: string, lines: XmlLine[]): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+
+  const checks: Array<{ field: string; allowZero: boolean }> = [
+    { field: 'CantidadItem',       allowZero: false },
+    { field: 'MontoItem',          allowZero: true  },
+    { field: 'PrecioUnitarioItem', allowZero: true  },
+  ]
+
+  for (const { field, allowZero } of checks) {
+    const re = new RegExp(`<${field}>([^<]+)</${field}>`, 'g')
+    let m
+    while ((m = re.exec(xml)) !== null) {
+      const n = parseFloat(m[1].trim())
+      if (isNaN(n)) continue
+      const invalid = allowZero ? n < 0 : n <= 0
+      if (invalid) {
+        const rule = allowZero ? '>= 0' : '> 0'
+        const escaped = m[1].trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        issues.push({
+          id: nextId(),
+          severity: 'red',
+          field,
+          line: findLine(new RegExp(`<${field}>${escaped}`), lines),
+          message: `${field} tiene valor inválido: "${m[1].trim()}". Debe ser ${rule} — ${allowZero ? 'no puede ser negativo' : 'debe ser mayor que cero'}.`,
+        })
+      }
+    }
+  }
+
+  return issues
+}
+
+// ── UnidadMedida valid codes ──────────────────────────────────────────────────
+
+/**
+ * UnidadMedida must be a valid code from DGII's measurement unit table (1–62).
+ * Checks all occurrences: items, Transporte section (UnidadBulto, UnidadVolumen).
+ * Codes confirmed from UnidadMedidaType enumeration in all XSD schemas.
+ */
+export function validateUnidadMedida(xml: string, lines: XmlLine[]): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+  const validSet = new Set([
+     1, 2, 3, 4, 5, 6, 7, 8, 9,10,
+    11,12,13,14,15,16,17,18,19,20,
+    21,22,23,24,25,26,27,28,29,30,
+    31,32,33,34,35,36,37,38,39,40,
+    41,42,43,44,45,46,47,48,49,50,
+    51,52,53,54,55,56,57,58,59,60,
+    61,62,
+  ])
+
+  const fields = ['UnidadMedida', 'UnidadReferencia', 'UnidadBulto', 'UnidadVolumen']
+
+  for (const field of fields) {
+    const re = new RegExp(`<${field}>([^<]+)</${field}>`, 'g')
+    let m
+    while ((m = re.exec(xml)) !== null) {
+      const v = m[1].trim()
+      const n = parseInt(v, 10)
+      if (!isNaN(n) && !validSet.has(n)) {
+        const escaped = v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        issues.push({
+          id: nextId(),
+          severity: 'red',
+          field,
+          line: findLine(new RegExp(`<${field}>${escaped}`), lines),
+          message: `${field} tiene código inválido: "${v}". Debe ser un valor entre 1 y 62 de la Tabla IV de DGII. Ejemplos: 6 (Caja), 14 (Fardo), 15 (Galones), 21 (Kg), 31 (Paquete), 43 (Unidad), 46 (Saco).`,
+        })
+      }
+    }
+  }
+
+  return issues
+}
