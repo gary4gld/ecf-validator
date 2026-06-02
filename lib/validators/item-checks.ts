@@ -442,14 +442,28 @@ function checkItemSumVsHeader(
     })
   }
 
-  if (headerTotal !== null && Math.abs(headerTotal - sumTotal) > TOLS) {
-    issues.push({
-      id: nextId(),
-      severity: 'orange',
-      field: 'MontoTotal',
-      line: findLine(/<MontoTotal>/, lines),
-      message: `MontoTotal (${headerTotal.toFixed(2)}) no coincide con la suma de todos los MontoItem facturables: ${sumTotal.toFixed(2)}. Diferencia: ${Math.abs(headerTotal - sumTotal).toFixed(2)} DOP. (Ítems con IndicadorFacturacion=0 excluidos.)`,
-    })
+  if (headerTotal !== null) {
+    // When IndicadorMontoGravado=0, item prices are pre-ITBIS — ITBIS is added at the
+    // header level. So MontoTotal = sum(items) + TotalITBIS, not sum(items) alone.
+    // When IndicadorMontoGravado=1, ITBIS is already included in item prices.
+    const indicadorGravado = parseInt(
+      raw.match(/<IndicadorMontoGravado>([^<]+)<\/IndicadorMontoGravado>/)?.[1]?.trim() ?? '1',
+      10
+    )
+    const itbisAdj = indicadorGravado === 0
+      ? Math.round((getHeaderNum('TotalITBIS') ?? 0) * 100) / 100
+      : 0
+
+    const adjustedSum = Math.round((sumTotal + itbisAdj) * 100) / 100
+    if (Math.abs(headerTotal - adjustedSum) > TOLS) {
+      issues.push({
+        id: nextId(),
+        severity: 'orange',
+        field: 'MontoTotal',
+        line: findLine(/<MontoTotal>/, lines),
+        message: `MontoTotal (${headerTotal.toFixed(2)}) no coincide con la suma de todos los MontoItem facturables${itbisAdj > 0 ? ` + TotalITBIS (${itbisAdj.toFixed(2)})` : ''}: ${adjustedSum.toFixed(2)}. Diferencia: ${Math.abs(headerTotal - adjustedSum).toFixed(2)} DOP. (Ítems con IndicadorFacturacion=0 excluidos.)`,
+      })
+    }
   }
 
   return issues
