@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { beautifyXml }        from '@/lib/xml-beautifier'
 import { detectInvoiceType, hasSignature } from '@/lib/xml-parser'
 import { colorizeXmlLine }    from '@/lib/xml-colorizer'
 import { validate }           from '@/lib/validators/validator'
+import { checkRNCRegistry }   from '@/lib/validators/registry-checks'
 import { INVOICE_TYPE_LABELS } from '@/lib/types'
 import type { ParsedXml, ValidationIssue, XmlLine, Severity } from '@/lib/types'
 
@@ -165,13 +166,15 @@ function ErrorPanel({
   activeIssueId,
   onSelect,
   panelRef,
+  registryPending,
 }: {
   issues: ValidationIssue[]
   activeIssueId: string | null
   onSelect: (id: string) => void
   panelRef: React.RefObject<HTMLDivElement | null>
+  registryPending: boolean
 }) {
-  if (issues.length === 0) {
+  if (issues.length === 0 && !registryPending) {
     return (
       <div
         className="rounded-2xl flex flex-col items-center justify-center py-12 px-6 text-center"
@@ -227,6 +230,24 @@ function ErrorPanel({
               />
             )),
         )}
+
+        {/* Registry check spinner */}
+        {registryPending && (
+          <div
+            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl mt-1"
+            style={{ background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.15)' }}
+          >
+            <svg
+              className="shrink-0 animate-spin"
+              width="14" height="14" viewBox="0 0 14 14" fill="none"
+              style={{ color: '#60a5fa' }}
+            >
+              <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeOpacity="0.25" strokeWidth="2" />
+              <path d="M7 1.5A5.5 5.5 0 0 1 12.5 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+            <span className="text-xs text-blue-400">Verificando RNCs en registro DGII…</span>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -243,17 +264,48 @@ export default function ValidatorPage() {
   const [parseError,    setParseError]    = useState<string | null>(null)
   const [isDragging,    setIsDragging]    = useState(false)
   const [activeIssueId, setActiveIssueId] = useState<string | null>(null)
+  const [registryIssues,  setRegistryIssues]  = useState<ValidationIssue[]>([])
+  const [registryPending, setRegistryPending] = useState(false)
 
   const fileInputRef    = useRef<HTMLInputElement>(null)
   const xmlContainerRef = useRef<HTMLDivElement>(null)
   const errorPanelRef   = useRef<HTMLDivElement>(null)
+
+  // ── Async registry check ─────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!parsedXml) {
+      setRegistryIssues([])
+      setRegistryPending(false)
+      return
+    }
+
+    setRegistryIssues([])
+    setRegistryPending(true)
+
+    let cancelled = false
+
+    checkRNCRegistry(parsedXml.raw, parsedXml.invoiceType)
+      .then((issues) => {
+        if (!cancelled) {
+          setRegistryIssues(issues)
+          setRegistryPending(false)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setRegistryPending(false)
+      })
+
+    return () => { cancelled = true }
+  }, [parsedXml])
 
   // ── Click handlers ──────────────────────────────────────────────────────────
 
   /** Called when an error card is clicked — scrolls the XML pane to that line. */
   function handleSelectIssue(issueId: string) {
     setActiveIssueId(issueId)
-    const issue = parsedXml?.issues.find((i) => i.id === issueId)
+    const allIssues = [...(parsedXml?.issues ?? []), ...registryIssues]
+    const issue = allIssues.find((i) => i.id === issueId)
     if (issue?.line) {
       const el = xmlContainerRef.current?.querySelector(`[data-line="${issue.line}"]`)
       el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -345,12 +397,13 @@ export default function ValidatorPage() {
 
   // ── Severity badge counts ───────────────────────────────────────────────────
 
-  const counts = parsedXml?.issues.reduce<Partial<Record<Severity, number>>>(
+  const allIssues = [...(parsedXml?.issues ?? []), ...registryIssues]
+  const counts = allIssues.reduce<Partial<Record<Severity, number>>>(
     (acc, issue) => ({ ...acc, [issue.severity]: (acc[issue.severity] ?? 0) + 1 }),
     {},
   ) ?? {}
 
-  const allClear = (parsedXml?.issues.length ?? 0) === 0
+  const allClear = allIssues.length === 0 && !registryPending
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -486,7 +539,7 @@ export default function ValidatorPage() {
                 <span className="text-sm text-gray-500">{parsedXml.lines.length} líneas</span>
 
                 {/* Severity badges — only shown severities that have ≥ 1 issue */}
-                {parsedXml.issues.length > 0 && (
+                {allIssues.length > 0 && (
                   <>
                     <span className="text-gray-700">·</span>
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -569,10 +622,11 @@ export default function ValidatorPage() {
               {/* Error panel — right */}
               <div className="w-full lg:w-80 lg:shrink-0">
                 <ErrorPanel
-                  issues={parsedXml.issues}
+                  issues={allIssues}
                   activeIssueId={activeIssueId}
                   onSelect={handleSelectIssue}
                   panelRef={errorPanelRef}
+                  registryPending={registryPending}
                 />
               </div>
 
