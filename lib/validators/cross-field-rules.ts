@@ -345,6 +345,20 @@ export function checkFechaDesdeHasta(
       message: `FechaDesde (${desdeRaw}) es posterior a FechaHasta (${hastaRaw}). El período de facturación no puede terminar antes de comenzar.`,
     }
   }
+
+  // FechaDesde after FechaEmision is unusual (advance invoice) — warn, don't reject
+  const emisionRaw = getValue('FechaEmision', xml)
+  const emision    = emisionRaw ? parseDate(emisionRaw) : null
+  if (emision && desde > emision) {
+    return {
+      id: nextId(),
+      severity: 'yellow',
+      field: 'FechaDesde',
+      line: findLine(/<FechaDesde>/, lines),
+      message: `FechaDesde (${desdeRaw}) es posterior a FechaEmision (${emisionRaw}). El período facturado comienza después de la fecha de emisión — esto corresponde a una factura adelantada. Verifica que sea intencional.`,
+    }
+  }
+
   return null
 }
 
@@ -491,4 +505,34 @@ export function checkForbiddenFields(
   }
 
   return issues
+}
+
+// ── E-33 CodigoModificacion must be 3 ────────────────────────────────────────
+
+/**
+ * E-33 (Nota de Débito) only allows CodigoModificacion=3 (Corrige montos).
+ * E-34 allows codes 1–5; E-33 does not.
+ *
+ * Source: DGII FAQ sections 1.7.3 and 1.7.4.
+ */
+export function checkCodigoModificacionE33(
+  xml: string,
+  invoiceType: InvoiceType,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  if (invoiceType !== 'E-33') return null
+
+  const v = getValue('CodigoModificacion', xml)
+  if (!v) return null
+
+  if (v.trim() !== '3') {
+    return {
+      id: nextId(),
+      severity: 'red',
+      field: 'CodigoModificacion',
+      line: findLine(/<CodigoModificacion>/, lines),
+      message: `CodigoModificacion="${v}" es inválido para E-33 (Nota de Débito). Solo se permite código 3 (Corrige montos). Los demás códigos (1 = Anula, 2 = Corrige texto, 4 = Reemplaza contingencia, 5 = Referencia consumo) no aplican para Notas de Débito.`,
+    }
+  }
+  return null
 }

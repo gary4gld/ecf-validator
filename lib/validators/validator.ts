@@ -4,10 +4,14 @@
  * Takes a ParsedXml object and returns all ValidationIssues found, sorted by
  * severity (red → orange → yellow → blue).
  *
- * This file orchestrates three layers of checks:
- *  1. Required fields — is each mandatory element present?
- *  2. Format checks  — do present fields conform to XSD patterns?
- *  3. Cross-field    — do multiple fields agree with each other?
+ * This file orchestrates seven layers of checks:
+ *  1. Required fields   — is each mandatory element present?
+ *  2. Format checks     — do present fields conform to XSD patterns?
+ *  3. Cross-field rules — do multiple fields agree with each other?
+ *  4. Conditional checks — obligation code 2 rules (context-dependent requirements)
+ *  5. Math checks       — are ITBIS calculations and totals internally consistent?
+ *  6. Sequence checks   — are sections and fields in the correct XSD-defined order?
+ *  7. Item checks       — are per-item fields valid and item totals consistent?
  */
 
 import type { ParsedXml, ValidationIssue } from '../types'
@@ -56,6 +60,7 @@ import {
   checkNCFModificadoPrefix,
   checkFechaVencimientoSecuencia,
   checkFechaDesdeHasta,
+  checkCodigoModificacionE33,
 } from './cross-field-rules'
 import {
   resetMathCounter,
@@ -200,6 +205,7 @@ function runCrossFieldChecks(parsed: ParsedXml): ValidationIssue[] {
     if (issue) issues.push(issue)
   }
   const pushAll = (list: ValidationIssue[]) => issues.push(...list)
+  push(checkVersion(xml, lines))
   push(checkEncfTipoMismatch(xml, lines))
   push(checkFechaHoraFirma(xml, invoiceType, lines))
   push(checkSignaturePresence(xml, lines))
@@ -211,6 +217,7 @@ function runCrossFieldChecks(parsed: ParsedXml): ValidationIssue[] {
   push(checkNCFModificadoPrefix(xml, invoiceType, lines))
   push(checkFechaVencimientoSecuencia(xml, lines))
   push(checkFechaDesdeHasta(xml, lines))
+  push(checkCodigoModificacionE33(xml, invoiceType, lines))
 
   return issues
 }
