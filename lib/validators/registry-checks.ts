@@ -1,21 +1,18 @@
 /**
  * Async RNC registry validation.
  *
- * Queries the Megaplus public endpoint to verify that RNCEmisor and RNCComprador
- * exist and are active in the DGII registry. This runs separately from the
- * synchronous validator — it is triggered in a useEffect after the main
- * validation completes and resolves when the API responds.
+ * Queries the local Next.js proxy route (/api/rnc?rnc={rnc}), which forwards
+ * the request server-to-server to Megaplus to bypass CORS restrictions.
  *
- * Endpoint: GET https://rnc.megaplus.com.do/api/consulta?rnc={rnc}
+ * This runs separately from the synchronous validator — it is triggered in a
+ * useEffect after the main validation completes and resolves when the API responds.
  *
  * SILENCE WHEN VALID: this function only returns issues when something is wrong.
  * A clean result produces no output — no "RNC is valid" confirmation message.
- *
- * CORS NOTE: if CORS errors occur in production, proxy this call through a
- * Next.js API route at /api/rnc?rnc={rnc} that forwards to Megaplus server-side.
  */
 
 import type { InvoiceType, ValidationIssue } from '../types'
+import { isValidRNC } from './format-checks'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -31,36 +28,7 @@ interface RNCApiResponse {
   rnc_consultado?:        string
 }
 
-// ── Checksum pre-check ────────────────────────────────────────────────────────
-
-/**
- * Quick structural validity check before making an API call.
- * If the RNC fails the checksum, format-checks.ts has already flagged it —
- * no need to add a redundant registry message on top.
- */
-function rncPassesChecksum(rnc: string): boolean {
-  if (rnc.length === 9) {
-    const weights = [7, 9, 8, 6, 5, 4, 3, 2]
-    const digits = rnc.split('').map(Number)
-    const sum = digits.slice(0, 8).reduce((acc, d, i) => acc + d * weights[i], 0)
-    let check = 11 - (sum % 11)
-    if (check === 10) check = 1
-    if (check === 11) check = 0
-    return digits[8] === check
-  }
-  if (rnc.length === 11) {
-    let sum = 0; let isEven = false
-    for (let i = rnc.length - 1; i >= 0; i--) {
-      let d = parseInt(rnc[i], 10)
-      if (isEven) { d *= 2; if (d > 9) d -= 9 }
-      sum += d; isEven = !isEven
-    }
-    return sum % 10 === 0
-  }
-  return false
-}
-
-
+// ── Internals ─────────────────────────────────────────────────────────────────
 
 let _regCounter = 0
 function nextId(): string {
@@ -111,8 +79,8 @@ async function checkSingleRNC(
   timeoutMs: number
 ): Promise<ValidationIssue[]> {
   // If the RNC doesn't pass checksum, format-checks.ts already flagged it.
-  // Skip the registry call to avoid a redundant or misleading second message.
-  if (!rncPassesChecksum(rnc)) return []
+  // Skip the registry call to avoid a redundant second error card.
+  if (!isValidRNC(rnc)) return []
 
   const issues: ValidationIssue[] = []
 

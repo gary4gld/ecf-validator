@@ -16,7 +16,7 @@ const TIMEOUT_MS   = 6000
 export async function GET(request: NextRequest) {
   const rnc = request.nextUrl.searchParams.get('rnc')
 
-  if (!rnc || !/^[0-9]{9,11}$/.test(rnc)) {
+  if (!rnc || !/^([0-9]{9}|[0-9]{11})$/.test(rnc)) {
     return NextResponse.json(
       { error: true, mensaje: 'RNC inválido — debe ser 9 u 11 dígitos' },
       { status: 400 }
@@ -33,17 +33,16 @@ export async function GET(request: NextRequest) {
     )
     clearTimeout(timer)
 
-    // Always return 200 to the client regardless of upstream status.
-    // registry-checks.ts reads the `error` field to distinguish not-found from success.
-    // Forwarding non-200 status codes causes the client to see null and show a
-    // misleading "connection issue" message instead of "RNC not found".
+    // Always pass through the Megaplus JSON with status 200 so the client can
+    // read the `error` field. Only fall back to 503 if the body isn't JSON
+    // (true connectivity/parsing failure, not a "not found" response).
     try {
       const data = await upstream.json()
       return NextResponse.json(data)
     } catch {
       return NextResponse.json(
         { error: true, mensaje: 'Respuesta inesperada del servicio DGII' },
-        { status: 200 }
+        { status: 503 }
       )
     }
 
