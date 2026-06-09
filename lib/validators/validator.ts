@@ -42,7 +42,6 @@ import {
   validateCodigoModificacion,
   validateFormaPagoValues,
   validateIndicadorNotaCredito,
-  validateIndicadorAgenteRetencion,
   validateNumericPositivity,
   validateUnidadMedida,
 } from './format-checks'
@@ -91,8 +90,7 @@ import {
   checkMontoPago,
   checkFormaPagoSum,
 } from './conditional-checks'
-
-// ── Severity sort order ────────────────────────────────────────────────────────
+import { checkForTypos, resetTypoCounter } from './typo-checks'
 
 const SEV_ORDER = { red: 0, orange: 1, yellow: 2, blue: 3 } as const
 
@@ -188,7 +186,6 @@ function runFormatChecks(parsed: ParsedXml): ValidationIssue[] {
   push(validateCodigoModificacion(xml, lines))
   pushAll(validateFormaPagoValues(xml, lines))
   push(validateIndicadorNotaCredito(xml, lines))
-  pushAll(validateIndicadorAgenteRetencion(xml, lines))
   pushAll(validateNumericPositivity(xml, lines))
   pushAll(validateUnidadMedida(xml, lines))
 
@@ -277,15 +274,19 @@ export function validate(parsed: ParsedXml): ValidationIssue[] {
   resetCondCounter()
   resetSeqCounter()
   resetItemCounter()
+  resetTypoCounter()
+
+  const { raw, invoiceType, lines } = parsed
 
   const issues: ValidationIssue[] = [
     ...runRequiredChecks(parsed),
     ...runFormatChecks(parsed),
+    ...checkForTypos(raw, lines),       // misspelled field detection (format layer)
     ...runCrossFieldChecks(parsed),
     ...runConditionalChecks(parsed),
     ...runMathChecks(parsed),
-    ...runSequenceChecks(parsed.raw, parsed.invoiceType, parsed.lines),
-    ...runItemChecks(parsed.raw, parsed.invoiceType, parsed.lines),
+    ...runSequenceChecks(raw, invoiceType, lines),
+    ...runItemChecks(raw, invoiceType, lines),
   ]
 
   // Deduplicate by field+message (in case a field triggers both required and format)

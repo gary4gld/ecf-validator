@@ -454,17 +454,6 @@ export function checkForbiddenFields(
   const issues: ValidationIssue[] = []
   const push = (issue: ValidationIssue | null) => { if (issue) issues.push(issue) }
 
-  // E-43: Comprador section does not exist in the schema at all
-  if (invoiceType === 'E-43' && /<Comprador>/.test(xml)) {
-    push({
-      id: nextId(),
-      severity: 'red',
-      field: 'Comprador',
-      line: findLine(/<Comprador>/, lines),
-      message: 'La sección Comprador no existe en el esquema de E-43 (Gastos Menores). Su presencia causará rechazo por DGII. Este tipo de comprobante no registra datos del comprador.',
-    })
-  }
-
   // E-32 and E-34: FechaVencimientoSecuencia is not defined in their schemas
   if (
     (invoiceType === 'E-32' || invoiceType === 'E-34') &&
@@ -501,6 +490,52 @@ export function checkForbiddenFields(
       field: 'RNCComprador',
       line: findLine(/<RNCComprador>/, lines),
       message: 'RNCComprador no existe en el esquema de E-47 (Pagos al Exterior). Los destinatarios son personas físicas o jurídicas no residentes que no tienen RNC dominicano. Usar IdentificadorExtranjero para identificarlos.',
+    })
+  }
+
+  // E-43: The entire <Comprador> section is absent from the E-43 XSD schema
+  // (obligation code 0 for the whole area). Any content under <Comprador>
+  // will cause a DGII rejection with "element is not expected".
+  if (invoiceType === 'E-43' && /<Comprador>/.test(xml)) {
+    issues.push({
+      id: nextId(), severity: 'red',
+      field: 'Comprador',
+      line: findLine(/<Comprador>/, lines),
+      message: 'La sección <Comprador> completa tiene código de obligatoriedad 0 para E-43 (Gastos Menores) — no existe en el esquema XSD. Su presencia causará rechazo por DGII con el error "element is not expected". Los comprobantes de gastos menores no identifican al comprador.',
+    })
+  }
+
+  // IdentificadorExtranjero is forbidden (obligation code 0) in E-31, E-41, E-45.
+  // Source: PDF obligation table field 39.
+  const ieForbiddenTypes = new Set<InvoiceType>(['E-31', 'E-41', 'E-45'])
+  if (ieForbiddenTypes.has(invoiceType) && /<IdentificadorExtranjero>/.test(xml)) {
+    issues.push({
+      id: nextId(), severity: 'red',
+      field: 'IdentificadorExtranjero',
+      line: findLine(/<IdentificadorExtranjero>/, lines),
+      message: `IdentificadorExtranjero no aplica para ${invoiceType}. El comprador en este tipo de e-CF debe identificarse con RNCComprador (RNC o Cédula dominicana). Su presencia causará rechazo por DGII.`,
+    })
+  }
+
+  // Mutual exclusion: RNCComprador and IdentificadorExtranjero cannot both be present.
+  // Source: PDF footnotes 3 and 7 — "cuando exista IdentificadorExtranjero se omitirá RNCComprador".
+  if (/<RNCComprador>/.test(xml) && /<IdentificadorExtranjero>/.test(xml)) {
+    issues.push({
+      id: nextId(), severity: 'red',
+      field: 'IdentificadorExtranjero',
+      line: findLine(/<IdentificadorExtranjero>/, lines),
+      message: 'RNCComprador e IdentificadorExtranjero no pueden estar presentes simultáneamente. Son mutuamente excluyentes: use RNCComprador para compradores con RNC/Cédula dominicana, o IdentificadorExtranjero para extranjeros sin RNC dominicano — nunca ambos.',
+    })
+  }
+
+  // IdentificadorExtranjero max length: 20 alphanumeric characters.
+  const ieVal = getValue('IdentificadorExtranjero', xml)
+  if (ieVal && ieVal.trim().length > 20) {
+    issues.push({
+      id: nextId(), severity: 'red',
+      field: 'IdentificadorExtranjero',
+      line: findLine(/<IdentificadorExtranjero>/, lines),
+      message: `IdentificadorExtranjero excede el máximo de 20 caracteres (actual: ${ieVal.trim().length}). El campo acepta hasta 20 caracteres alfanuméricos.`,
     })
   }
 

@@ -11,7 +11,7 @@
  */
 
 import type { ValidationIssue, XmlLine } from '../types'
-import { PATTERNS, MAX_LENGTHS } from './schema-types'
+import { PATTERNS, MAX_LENGTHS, REQUIRED_MAX_LENGTH_FIELDS } from './schema-types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -41,6 +41,13 @@ function getValues(field: string, xml: string): string[] {
   let m
   while ((m = re.exec(xml)) !== null) results.push(m[1].trim())
   return results
+}
+
+/** Combined RNC validity check used by both format-checks and registry-checks. */
+export function isValidRNC(rnc: string): boolean {
+  if (rnc.length === 9)  return validateRNC9Checksum(rnc)
+  if (rnc.length === 11) return validateLuhn(rnc)
+  return false
 }
 
 // ── RNC format ────────────────────────────────────────────────────────────────
@@ -96,7 +103,16 @@ function checkRnc(
   value: string,
   line: number | null
 ): ValidationIssue | null {
-  // Structural check first (9 or 11 digits)
+  // Pre-check: XSD pattern is [0-9]{9}|[0-9]{11} — digits only, no hyphens or spaces.
+  // People often write RNCs with hyphens (131-880-681) but the XML schema rejects them.
+  if (/[^0-9]/.test(value)) {
+    return {
+      id: nextId(), severity: 'red', field, line,
+      message: `${field} "${value}" contiene caracteres inválidos. El esquema XSD requiere exactamente 9 u 11 dígitos numéricos sin guiones ni espacios (ej. "131880681", no "131-880-681"). DGII rechazará el documento.`,
+    }
+  }
+
+  // Structural check (9 or 11 digits)
   if (!PATTERNS.RNC.test(value)) {
     return {
       id: nextId(),
@@ -275,12 +291,20 @@ export function validateMaxLengths(xml: string, lines: XmlLine[]): ValidationIss
   for (const [field, max] of Object.entries(MAX_LENGTHS)) {
     const v = getValue(field, xml)
     if (v && v.length > max) {
+      // Required fields (minOccurs=1 in all types): max-length violation causes
+      // outright DGII rejection. Optional fields: "Aceptado Condicional" only.
+      const isRequired = REQUIRED_MAX_LENGTH_FIELDS.has(field)
+      const severity = isRequired ? 'red' : 'yellow'
+      const consequence = isRequired
+        ? 'DGII rechazará el documento con error de estructura XML.'
+        : 'Esto puede causar un rechazo "Aceptado Condicional" por DGII.'
+
       issues.push({
         id: nextId(),
-        severity: 'yellow',
+        severity,
         field,
         line: findLine(new RegExp(`<${field}>`), lines),
-        message: `${field} excede el máximo de ${max} caracteres (actual: ${v.length}). Esto puede causar un rechazo "Aceptado Condicional" por DGII.`,
+        message: `${field} excede el máximo de ${max} caracteres (actual: ${v.length}). ${consequence}`,
       })
     }
   }
@@ -518,29 +542,7 @@ export function validateIndicadorNotaCredito(xml: string, lines: XmlLine[]): Val
 }
 
 /**
- * IndicadorAgenteRetencionoPercepcion must be 1 (Retención) or 2 (Percepción).
- * Checks all occurrences since it can appear per item in E-41 and E-47.
- * Note: Régimen de percepción no está vigente (footnote 52), so 2 is technically unused.
- */
-export function validateIndicadorAgenteRetencion(xml: string, lines: XmlLine[]): ValidationIssue[] {
-  const issues: ValidationIssue[] = []
-  const re = /<IndicadorAgenteRetencionoPercepcion>([^<]+)<\/IndicadorAgenteRetencionoPercepcion>/g
-  let m
-  while ((m = re.exec(xml)) !== null) {
-    const v = m[1].trim()
-    if (!['1','2'].includes(v)) {
-      issues.push({
-        id: nextId(),
-        severity: 'red',
-        field: 'IndicadorAgenteRetencionoPercepcion',
-        line: findLine(/<IndicadorAgenteRetencionoPercepcion>/, lines),
-        message: `IndicadorAgenteRetencionoPercepcion tiene valor inválido: "${v}". Valores válidos: 1 (Retención), 2 (Percepción). Nota: el régimen de percepción no está vigente actualmente.`,
-      })
-    }
-  }
-  return issues
-}
- /* Note: FormaPago=5 type restriction (E-32 only) is handled in conditional-checks.ts.
+ * Note: FormaPago=5 type restriction (E-32 only) is handled in conditional-checks.ts.
  */
 export function validateFormaPagoValues(xml: string, lines: XmlLine[]): ValidationIssue[] {
   const issues: ValidationIssue[] = []
@@ -725,7 +727,10 @@ export function validateUnidadMedida(xml: string, lines: XmlLine[]): ValidationI
     61,62,
   ])
 
-  const fields = ['UnidadMedida', 'UnidadReferencia', 'UnidadBulto', 'UnidadVolumen']
+  // Fields that use UnidadMedidaType (codes 1-62):
+  // UnidadReferencia is validated per-item in checkISCProductFields (item-checks.ts)
+  // to avoid duplicate errors on ISC-product items.
+  const fields = ['UnidadMedida', 'CodigoSubcantidad']
 
   for (const field of fields) {
     const re = new RegExp(`<${field}>([^<]+)</${field}>`, 'g')

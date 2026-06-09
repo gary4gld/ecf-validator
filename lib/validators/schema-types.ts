@@ -54,12 +54,13 @@ export const PATTERNS = {
 
 export const MAX_LENGTHS: Record<string, number> = {
   // Emisor
-  RazonSocialEmisor:          150,
+  RazonSocialEmisor:          150,  // minOccurs=1 — RED on violation
   NombreComercial:            150,
-  DireccionEmisor:            100,
+  DireccionEmisor:            100,  // minOccurs=1 — RED on violation
   CorreoEmisor:                80,
   CodigoVendedor:              60,
   WebSite:                     50,
+  ActividadEconomica:         100,
   Sucursal:                    20,
   ZonaVenta:                   20,
   RutaVenta:                   20,
@@ -67,19 +68,30 @@ export const MAX_LENGTHS: Record<string, number> = {
   NumeroFacturaInterna:        20,
 
   // Comprador
-  RazonSocialComprador:       150,
+  RazonSocialComprador:       150,  // optional in E-32/33/34 — keep YELLOW
   ContactoComprador:           80,
   DireccionComprador:         100,
   CorreoComprador:             80,
 
   // Item
-  NombreItem:                  80,
+  NombreItem:                  80,  // minOccurs=1 — RED on violation
   DescripcionItem:           1000,
 
   // Misc
   BancoPago:                   75,
   NumeroCuentaPago:            28,
 }
+
+/**
+ * Fields that are universally required (minOccurs=1 in ALL ECF types).
+ * Max-length violations on these cause DGII outright rejection — not just
+ * "Aceptado Condicional". Used by validateMaxLengths to assign red severity.
+ */
+export const REQUIRED_MAX_LENGTH_FIELDS = new Set([
+  'RazonSocialEmisor',   // AlfNum150Type, minOccurs=1 in all types
+  'DireccionEmisor',     // AlfNum100Type, minOccurs=1 in all types (confirmed by DGII rejection)
+  'NombreItem',          // AlfNum80Type, minOccurs=1 in all item schemas
+])
 
 // ── Enumerations ───────────────────────────────────────────────────────────────
 // Valid values for coded fields. Using Set for O(1) membership checks.
@@ -127,7 +139,18 @@ export const ENCF_PREFIXES: Record<string, string> = {
   '47': 'E47',
 }
 
-// ── E-32 summary threshold ─────────────────────────────────────────────────────
+/** UnidadMedidaType — valid measurement unit codes 1–62 (from DGII XSD). */
+export const UNIDAD_MEDIDA_VALIDOS = new Set([
+   1, 2, 3, 4, 5, 6, 7, 8, 9,10,
+  11,12,13,14,15,16,17,18,19,20,
+  21,22,23,24,25,26,27,28,29,30,
+  31,32,33,34,35,36,37,38,39,40,
+  41,42,43,44,45,46,47,48,49,50,
+  51,52,53,54,55,56,57,58,59,60,
+  61,62,
+])
+
+/** E-32 RFCE threshold ──────────────────────────────────────────────────────── */
 
 /** E-32 invoices below this amount require an RFCE summary submission. */
 export const E32_RFCE_THRESHOLD = 250_000
