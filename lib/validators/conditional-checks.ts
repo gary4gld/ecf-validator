@@ -12,9 +12,10 @@
  *   Blue   — informational / reminder
  *
  * Note on IndicadorFacturacion type-specific rules (footnotes 50 & 51):
- *   These rules are documented here but validated at HEADER level only.
- *   Full per-item enforcement requires DOM-based item parsing (see
- *   VALIDATION_LIMITATIONS.md §3).
+ *   Implicit enforcement here via checkITBISForbiddenTypes — when all items must be
+ *   Exento, the corresponding ITBIS amount fields must be absent from Totales.
+ *   Explicit per-item enum enforcement (IndicadorFacturacion value per item) is in
+ *   item-checks.ts (checkIndicadorFacturacion) via DOM parsing.
  */
 
 import type { InvoiceType, ValidationIssue, XmlLine } from '../types'
