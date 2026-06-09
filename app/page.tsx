@@ -324,6 +324,53 @@ export default function ValidatorPage() {
   const processXml = useCallback((xml: string) => {
     if (!xml.trim()) return
     setActiveIssueId(null)
+    setRegistryIssues([])
+    setRegistryPending(false)
+
+    // ── Pre-check: detect malformed XML before any processing ─────────────────
+    // DOMParser silently returns a <parsererror> document for invalid XML.
+    // We catch this early so we can show the raw XML (not the parsed fragment)
+    // and a clear error, without running any validators on broken content.
+    const checkDoc = new DOMParser().parseFromString(xml, 'text/xml')
+    const parseErrEl = checkDoc.querySelector('parsererror')
+    if (parseErrEl) {
+      // Extract the error message — browsers put it in a <div> inside parsererror
+      const raw = parseErrEl.textContent?.trim() ?? ''
+      // Try to extract line/column info from the browser's error text
+      const lineMatch = raw.match(/line\s+(\d+)/i)
+      const colMatch  = raw.match(/column\s+(\d+)/i)
+      const location  = lineMatch
+        ? ` (línea ${lineMatch[1]}${colMatch ? `, columna ${colMatch[1]}` : ''})`
+        : ''
+      // Try to extract the actual error description (after the line info)
+      const descMatch = raw.match(/:\s*(.+)$/m)
+      const description = descMatch ? descMatch[1].trim() : 'error de sintaxis XML'
+
+      // Show the raw unprocessed XML so the user can see the full content
+      const rawLines: XmlLine[] = xml.split('\n').map((content, i) => ({
+        number: i + 1, content, severity: null, issueId: null,
+      }))
+      const parseIssue: ValidationIssue = {
+        id: 'parse-1',
+        severity: 'red',
+        field: 'Estructura XML',
+        line: lineMatch ? parseInt(lineMatch[1], 10) : null,
+        message: `XML mal formado${location}: ${description}. El documento no puede ser procesado ni enviado a DGII. Corrija la estructura antes de continuar.`,
+      }
+      const issueLines = rawLines.map(l =>
+        l.number === parseIssue.line ? { ...l, severity: 'red' as const, issueId: 'parse-1' } : l
+      )
+      setParsedXml({
+        raw: xml,
+        beautified: xml,
+        lines: issueLines,
+        invoiceType: 'unknown' as any,
+        hasSignature: false,
+        issues: [parseIssue],
+      })
+      setParseError(null)
+      return
+    }
 
     try {
       const beautified  = beautifyXml(xml)
