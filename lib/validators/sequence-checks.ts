@@ -321,7 +321,80 @@ function checkOrder(
   return issues
 }
 
-// ── Section checks ─────────────────────────────────────────────────────────────
+/**
+ * Unified Item field sequence — covers all 10 ECF types in one ordered list.
+ *
+ * KEY STRUCTURAL DIFFERENCES BY TYPE (all handled by the unified sequence):
+ *   - Retencion position: between IndicadorFacturacion and NombreItem in ALL
+ *     types that have it (E-31/33/34 optional; E-41 required; E-47 required)
+ *   - CantidadReferencia/UnidadReferencia/TablaSubcantidad/GradosAlcohol:
+ *     present in E-31/32/33/34/45 — absent in E-41/43/44/46/47
+ *   - FechaElaboracion/FechaVencimientoItem: present in E-31/32/33/34/41/44/45/46
+ *   - Mineria: present in E-31/32/33/34/46
+ *   - DescuentoMonto/TablaSubDescuento/RecargoMonto/TablaSubRecargo:
+ *     absent in E-43 (code 0) and E-47 (no discounts in schema)
+ *   - OtraMonedaDetalle: before MontoItem when present (all types)
+ *
+ * Using one unified sequence is correct because checkOrder() only compares
+ * fields that ARE PRESENT in the document — absent fields are simply skipped.
+ *
+ * Sources: all 10 XSD item xs:sequence definitions, verified 2026.
+ */
+const ITEM_SEQUENCE: string[] = [
+  'NumeroLinea',
+  'TablaCodigosItem',
+  'IndicadorFacturacion',
+  'Retencion',               // MUST be before NombreItem (all types that have it)
+  'NombreItem',
+  'IndicadorBienoServicio',
+  'DescripcionItem',
+  'CantidadItem',
+  'UnidadMedida',
+  'CantidadReferencia',      // E-31/32/33/34/45 only
+  'UnidadReferencia',        // E-31/32/33/34/45 only
+  'TablaSubcantidad',        // E-31/32/33/34/45 only
+  'GradosAlcohol',           // E-31/32/33/34/45 only
+  'PrecioUnitarioReferencia',// E-31/32/33/34/45 only
+  'FechaElaboracion',        // E-31/32/33/34/41/44/45/46
+  'FechaVencimientoItem',    // E-31/32/33/34/41/44/45/46
+  'Mineria',                 // E-31/32/33/34/46 only
+  'PrecioUnitarioItem',
+  'DescuentoMonto',          // absent in E-43, E-47
+  'TablaSubDescuento',       // absent in E-43, E-47
+  'RecargoMonto',            // absent in E-43, E-47
+  'TablaSubRecargo',         // absent in E-43, E-47
+  'OtraMonedaDetalle',       // present in some types when billing in foreign currency
+  'MontoItem',
+]
+
+// ── Item-level sequence check ─────────────────────────────────────────────────
+
+/**
+ * Checks field ordering within each <Item> element.
+ * The most impactful error this catches: Retencion placed after NombreItem
+ * instead of before it — a common mistake in E-41/E-47 implementations.
+ */
+function checkItemsOrder(
+  doc: Document,
+  lines: XmlLine[]
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+
+  const items = Array.from(doc.querySelectorAll('DetallesItems > Item'))
+  items.forEach((item) => {
+    const lineaEl  = item.querySelector(':scope > NumeroLinea')
+    const lineaNum = lineaEl?.textContent?.trim() ?? '?'
+
+    const actual   = Array.from(item.children).map((el) => el.tagName)
+
+    // Run order check — same algorithm used for all other sections.
+    // Re-label the section as "Item N" so the error message is specific.
+    const itemIssues = checkOrder(`Item ${lineaNum}`, actual, ITEM_SEQUENCE, lines)
+    issues.push(...itemIssues)
+  })
+
+  return issues
+}
 
 function checkRootOrder(
   doc: Document,
@@ -444,6 +517,7 @@ export function runSequenceChecks(
     ...checkCompradorOrder(doc, invoiceType, lines),
     ...checkTotalesOrder(doc, invoiceType, lines),
     ...checkInformacionReferenciaOrder(doc, invoiceType, lines),
+    ...checkItemsOrder(doc, lines),
   ]
 }
 
