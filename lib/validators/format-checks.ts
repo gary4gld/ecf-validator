@@ -544,6 +544,48 @@ export function validateIndicadorNotaCredito(xml: string, lines: XmlLine[]): Val
 /**
  * Note: FormaPago=5 type restriction (E-32 only) is handled in conditional-checks.ts.
  */
+
+// ── TipoMoneda: Tabla II Codificación Monedas ──────────────────────────────────
+
+/**
+ * TipoMoneda must be one of the 16 codes from Tabla II (Codificación Monedas).
+ * Source: XSD TipoMonedaType (confirmed identical across all 10 invoice types).
+ * PDF field 120, validation rule a): "Validar con la Tabla II (Codificación Monedas)".
+ */
+const TIPO_MONEDA_CODES = new Set([
+  'BRL', // Real Brasileño
+  'CAD', // Dólar Canadiense
+  'CHF', // Franco Suizo
+  'CHY', // Yuan Chino
+  'XDR', // Derecho Especial de Giro (unidad FMI — no es una moneda)
+  'DKK', // Corona Danesa
+  'EUR', // Euro
+  'GBP', // Libra Esterlina
+  'JPY', // Yen Japonés
+  'NOK', // Corona Noruega
+  'SCP', // Libra Escocesa
+  'SEK', // Corona Sueca
+  'USD', // Dólar Estadounidense
+  'VEF', // Bolívar Fuerte Venezolano
+  'HTG', // Gourde Haitiana
+  'MXN', // Peso Mexicano
+])
+
+export function validateTipoMoneda(
+  xml:   string,
+  lines: XmlLine[]
+): ValidationIssue[] {
+  const val = getValue('TipoMoneda', xml)
+  if (!val) return []
+  const code = val.trim()
+  if (TIPO_MONEDA_CODES.has(code)) return []
+  return [{
+    id: nextId(), severity: 'red',
+    field: 'TipoMoneda',
+    line: findLine(/<TipoMoneda>/, lines),
+    message: `TipoMoneda "${val}" no es un código válido según la Tabla II de Codificación Monedas del Formato eCF. Códigos aceptados: ${[...TIPO_MONEDA_CODES].join(', ')}.`,
+  }]
+}
 export function validateFormaPagoValues(xml: string, lines: XmlLine[]): ValidationIssue[] {
   const issues: ValidationIssue[] = []
   if (!/<TablaFormasPago>/.test(xml)) return issues
@@ -712,7 +754,9 @@ export function validateNumericPositivity(xml: string, lines: XmlLine[]): Valida
 
 /**
  * UnidadMedida must be a valid code from DGII's measurement unit table (1–62).
- * Checks all occurrences: items, Transporte section (UnidadBulto, UnidadVolumen).
+ * Checks all occurrences: items (UnidadMedida, CodigoSubcantidad) and
+ * bulk/weight/volume transport fields (UnidadBulto, UnidadVolumen,
+ * UnidadPesoBruto, UnidadPesoNeto).
  * Codes confirmed from UnidadMedidaType enumeration in all XSD schemas.
  */
 export function validateUnidadMedida(xml: string, lines: XmlLine[]): ValidationIssue[] {
@@ -730,7 +774,8 @@ export function validateUnidadMedida(xml: string, lines: XmlLine[]): ValidationI
   // Fields that use UnidadMedidaType (codes 1-62):
   // UnidadReferencia is validated per-item in checkISCProductFields (item-checks.ts)
   // to avoid duplicate errors on ISC-product items.
-  const fields = ['UnidadMedida', 'CodigoSubcantidad']
+  const fields = ['UnidadMedida', 'CodigoSubcantidad',
+                  'UnidadBulto', 'UnidadVolumen', 'UnidadPesoBruto', 'UnidadPesoNeto']
 
   for (const field of fields) {
     const re = new RegExp(`<${field}>([^<]+)</${field}>`, 'g')

@@ -56,9 +56,11 @@ export const KNOWN_FIELDS = new Set<string>([
   'FechaVencimientoSecuencia', 'IndicadorEnvioDiferido', 'IndicadorMontoGravado',
   'TipoIngresos', 'TipoPago', 'TotalPaginas', 'FechaDesde', 'FechaHasta',
   'TablaFormasPago', 'FormaDePago', 'FormaPago', 'MontoPago',
-  'FechaLimitePago',       // conditional on credit invoices
-  'IndicadorNotaCredito',  // E-34 IdDoc field (credit note indicator)
-  'TipoCuentaPago',        // payment account type
+  'FechaLimitePago',              // conditional on credit invoices
+  'IndicadorNotaCredito',         // E-34 credit note indicator
+  'TipoCuentaPago',               // payment account type
+  'IndicadorServicioTodoIncluido',// all-inclusive service indicator
+  'TerminoPago',                  // payment term
 
   // ── Emisor ──
   'Emisor',
@@ -78,6 +80,8 @@ export const KNOWN_FIELDS = new Set<string>([
   'MunicipioComprador', 'ProvinciaComprador', 'PaisComprador',
   'FechaEntrega', 'FechaOrdenCompra', 'NumeroOrdenCompra',
   'CodigoInternoComprador', 'ResponsablePago',
+  'ContactoEntrega', 'DireccionEntrega', 'TelefonoAdicional',
+  'InformacionAdicionalComprador',
 
   // ── Totales ──
   'Totales',
@@ -94,10 +98,9 @@ export const KNOWN_FIELDS = new Set<string>([
 
   // ── OtraMoneda (Encabezado) ──
   'OtraMoneda',
-  'TipoMoneda',            // currency type code for foreign-currency invoices
-  'TipoCambio',
-  'MontoGravadoTotalOtraMoneda', 'MontoGravadoI1OtraMoneda',
-  'MontoGravadoI2OtraMoneda', 'MontoGravadoI3OtraMoneda',
+  'TipoMoneda', 'TipoCambio',
+  'MontoGravadoTotalOtraMoneda',
+  'MontoGravado1OtraMoneda', 'MontoGravado2OtraMoneda', 'MontoGravado3OtraMoneda',
   'MontoExentoOtraMoneda',
   'TotalITBISOtraMoneda', 'TotalITBIS1OtraMoneda',
   'TotalITBIS2OtraMoneda', 'TotalITBIS3OtraMoneda',
@@ -107,14 +110,50 @@ export const KNOWN_FIELDS = new Set<string>([
   'NCFModificado', 'FechaNCFModificado', 'CodigoModificacion',
   'RazonModificacion', 'RNCOtroContribuyente',
 
-  // ── InformacionesAdicionales ──
+  // ── InformacionesAdicionales (shared fields; E-46 export fields listed below) ──
   'NumeroContenedor', 'NumeroReferencia',
+  'FechaEmbarque', 'NumeroEmbarque',
+
+  // ── InformacionesAdicionales — E-46 export / port fields (obligation 0 in all other types) ──
+  'NombrePuertoEmbarque', 'CondicionesEntrega',
+  'TotalFob', 'Seguro', 'Flete', 'OtrosGastos', 'TotalCif',
+  'RegimenAduanero', 'NombrePuertoSalida', 'NombrePuertoDesembarque',
+
+  // ── InformacionesAdicionales — weight/bulk detail (present in most types, not E-46 only) ──
+  'PesoBruto', 'PesoNeto', 'UnidadPesoBruto', 'UnidadPesoNeto',
+  'CantidadBulto', 'UnidadBulto', 'VolumenBulto', 'UnidadVolumen',
+
+  // ── Transporte ──
+  // E-46 only: ViaTransporte, PaisOrigen, DireccionDestino, PaisDestino (+ E-47),
+  //            RNCIdentificacionCompaniaTransportista, NombreCompaniaTransportista, NumeroViaje
+  // Most types: Conductor, DocumentoTransporte, Ficha, Placa,
+  //             RutaTransporte, ZonaTransporte, NumeroAlbaran
+  'Transporte',
+  'ViaTransporte', 'PaisOrigen', 'DireccionDestino', 'PaisDestino',
+  'RNCIdentificacionCompaniaTransportista', 'NombreCompaniaTransportista', 'NumeroViaje',
+  'Conductor', 'DocumentoTransporte', 'Ficha', 'Placa',
+  'RutaTransporte', 'ZonaTransporte', 'NumeroAlbaran',
 
   // ── DescuentosORecargos ──
   'DescuentoORecargo', 'NumeroLinea',
   'TipoAjuste', 'DescripcionDescuentooRecargo', 'TipoValor',
-  'MontoDescuentooRecargo', 'IndicadorFacturacionDescuentooRecargo',
-  'IndicadorNorma1007',
+  'MontoDescuentooRecargo', 'ValorDescuentooRecargo',
+  'MontoDescuentooRecargoOtraMoneda',
+  'IndicadorFacturacionDescuentooRecargo', 'IndicadorNorma1007',
+  'TablaImpuestoAdicional',    // also appears within DescuentosORecargos
+  'ImpuestoAdicionalOtraMoneda',
+
+  // ── Paginacion ──
+  'Paginacion', 'Pagina',
+  'PaginaNo', 'NoLineaDesde', 'NoLineaHasta',
+  'SubtotalMontoGravadoPagina',
+  'SubtotalMontoGravado1Pagina', 'SubtotalMontoGravado2Pagina', 'SubtotalMontoGravado3Pagina',
+  'SubtotalExentoPagina', 'SubtotalItbisPagina',
+  'SubtotalItbis1Pagina', 'SubtotalItbis2Pagina', 'SubtotalItbis3Pagina',
+  'MontoSubtotalPagina',
+  'SubtotalImpuestoAdicional', 'SubtotalImpuestoAdicionalPagina',
+  'SubtotalImpuestoSelectivoConsumoEspecificoPagina',
+  'SubtotalOtrosImpuesto', 'SubtotalMontoNoFacturablePagina',
 
   // ── Item ──
   'Item',
@@ -138,11 +177,10 @@ export const KNOWN_FIELDS = new Set<string>([
   'TablaSubRecargo', 'SubRecargo',
   'TipoSubRecargo', 'SubRecargoPorcentaje', 'MontoSubRecargo',
   'OtraMonedaDetalle',
-  'PrecioOtraMoneda', 'DescuentoOtraMoneda', 'RecargoOtraMoneda',
-  'MontoItemOtraMoneda',
+  'PrecioOtraMoneda', 'DescuentoOtraMoneda', 'RecargoOtraMoneda', 'MontoItemOtraMoneda',
   'MontoItem',
 
-  // ── ImpuestosAdicionales ──
+  // ── ImpuestosAdicionales (item-level) ──
   'ImpuestosAdicionales', 'ImpuestoAdicional',
   'TipoImpuesto', 'TasaImpuestoAdicional',
   'MontoImpuestoSelectivoConsumoEspecifico',
@@ -155,16 +193,10 @@ export const KNOWN_FIELDS = new Set<string>([
   'SubTotalExento', 'SubTotalMontoGravadoTotal',
   'SubTotalMontoGravadoI1', 'SubTotalMontoGravadoI2', 'SubTotalMontoGravadoI3',
   'SubTotaITBIS', 'SubTotaITBIS1', 'SubTotaITBIS2', 'SubTotaITBIS3',
-
-  // ── Mineria section ──
-  'Transporte', 'NombreTransportista', 'NIT', 'DireccionTransportista',
-  'RutaTransporte', 'NumeroVehiculo',
+  'MontoSubTotal', 'SubTotalImpuestoAdicional', 'Lineas',
 
   // ── RFCE ──
   'CodigoSeguridadeCF',
-
-  // ── Paginacion ──
-  'Paginacion', 'PaginaActual',
 ])
 
 // ── Levenshtein distance ──────────────────────────────────────────────────────

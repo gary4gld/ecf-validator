@@ -539,6 +539,73 @@ export function checkForbiddenFields(
     })
   }
 
+  // ── E-46-only fields: forbidden in all other invoice types ────────────────
+  // These fields (InformacionesAdicionales export fields + Transporte section) have
+  // obligation code 0 for E-31 through E-47 except E-46. Source: PDF table fields 60-84.
+  if (invoiceType !== 'E-46') {
+    const e46OnlyFields: [string, string][] = [
+      // InformacionesAdicionales — export/port fields (obligation 0 for all types except E-46)
+      ['NombrePuertoEmbarque',   'NombrePuertoEmbarque'],
+      ['CondicionesEntrega',     'CondicionesEntrega'],
+      ['TotalFob',               'TotalFob (valor FOB)'],
+      ['Seguro',                 'Seguro'],
+      ['Flete',                  'Flete'],
+      ['OtrosGastos',            'OtrosGastos'],
+      ['TotalCif',               'TotalCif'],
+      ['RegimenAduanero',        'RegimenAduanero'],
+      ['NombrePuertoSalida',     'NombrePuertoSalida'],
+      ['NombrePuertoDesembarque','NombrePuertoDesembarque'],
+      // Transporte — export-specific fields (obligation 0 for all except E-46; PaisDestino also E-47)
+      ['ViaTransporte',          'ViaTransporte'],
+      ['PaisOrigen',             'PaisOrigen'],
+      ['DireccionDestino',       'DireccionDestino'],
+      ['RNCIdentificacionCompaniaTransportista', 'RNCIdentificacionCompaniaTransportista'],
+      ['NombreCompaniaTransportista', 'NombreCompaniaTransportista'],
+      ['NumeroViaje',            'NumeroViaje'],
+      // Comprador
+      ['PaisComprador',          'PaisComprador'],
+    ]
+    for (const [field, label] of e46OnlyFields) {
+      if (new RegExp(`<${field}>`).test(xml)) {
+        issues.push({
+          id: nextId(), severity: 'red',
+          field,
+          line: findLine(new RegExp(`<${field}>`), lines),
+          message: `${label} solo aplica para E-46 (Exportaciones). Su presencia en ${invoiceType} causará rechazo por DGII con "element is not expected".`,
+        })
+      }
+    }
+
+    // PaisDestino is valid for E-46 AND E-47 (obligation 3 for both)
+    // but forbidden (obligation 0) in all other types.
+    if (invoiceType !== 'E-47' && /<PaisDestino>/.test(xml)) {
+      issues.push({
+        id: nextId(), severity: 'red',
+        field: 'PaisDestino',
+        line: findLine(/<PaisDestino>/, lines),
+        message: `PaisDestino solo aplica para E-46 (Exportaciones) y E-47 (Pagos al Exterior). Su presencia en ${invoiceType} causará rechazo por DGII.`,
+      })
+    }
+  }
+
+  // ── PesoBruto ≥ PesoNeto ────────────────────────────────────────────────────
+  // Applies whenever both fields are present (E-46 InformacionesAdicionales).
+  // Gross weight includes packaging and must always be ≥ net weight.
+  const pesoBrutoStr = getValue('PesoBruto', xml)
+  const pesoNetoStr  = getValue('PesoNeto',  xml)
+  if (pesoBrutoStr && pesoNetoStr) {
+    const pesoBruto = parseFloat(pesoBrutoStr)
+    const pesoNeto  = parseFloat(pesoNetoStr)
+    if (!isNaN(pesoBruto) && !isNaN(pesoNeto) && pesoBruto < pesoNeto) {
+      issues.push({
+        id: nextId(), severity: 'red',
+        field: 'PesoBruto',
+        line: findLine(/<PesoBruto>/, lines),
+        message: `PesoBruto (${pesoBruto}) no puede ser menor que PesoNeto (${pesoNeto}). El peso bruto incluye embalaje y debe ser mayor o igual al peso neto.`,
+      })
+    }
+  }
+
   return issues
 }
 

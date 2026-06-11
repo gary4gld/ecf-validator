@@ -135,6 +135,11 @@ export const ISC_ALCOHOL_CODES = new Set<string>(
   Array.from({ length: 17 }, (_, i) => String(i + 6).padStart(3, '0'))  // 006–022
 )
 
+/** All valid TipoImpuesto codes (001–039) from ImpuestosAdicionalesType XSD enum. */
+export const VALID_ISC_CODES = new Set<string>(
+  Array.from({ length: 39 }, (_, i) => String(i + 1).padStart(3, '0'))  // 001–039
+)
+
 export type ISCRateValidationResult =
   | { status: 'valid' }
   | { status: 'mismatch'; declared: number; expected: number; resolution: string }

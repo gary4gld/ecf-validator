@@ -44,6 +44,7 @@ import {
   validateIndicadorNotaCredito,
   validateNumericPositivity,
   validateUnidadMedida,
+  validateTipoMoneda,
 } from './format-checks'
 import {
   resetCrossCounter,
@@ -68,6 +69,9 @@ import {
   checkITBISRates,
   checkMontoTotal,
   checkValorPagar,
+  checkOtraMonedaTotals,
+  checkTotalCif,
+  checkHeaderImpuestosAdicionales,
 } from './math-checks'
 import {
   resetSeqCounter,
@@ -89,6 +93,7 @@ import {
   checkE46ITBISRates,
   checkMontoPago,
   checkFormaPagoSum,
+  checkPaginacion,
 } from './conditional-checks'
 import { checkForTypos, resetTypoCounter } from './typo-checks'
 
@@ -186,6 +191,7 @@ function runFormatChecks(parsed: ParsedXml): ValidationIssue[] {
   push(validateCodigoModificacion(xml, lines))
   pushAll(validateFormaPagoValues(xml, lines))
   push(validateIndicadorNotaCredito(xml, lines))
+  pushAll(validateTipoMoneda(xml, lines))
   pushAll(validateNumericPositivity(xml, lines))
   pushAll(validateUnidadMedida(xml, lines))
 
@@ -238,6 +244,7 @@ function runConditionalChecks(parsed: ParsedXml): ValidationIssue[] {
   pushAll(checkE46ITBISRates(xml, invoiceType, lines))
   push(checkMontoPago(xml, lines))
   push(checkFormaPagoSum(xml, lines))
+  pushAll(checkPaginacion(xml, lines))
 
   return issues
 }
@@ -256,6 +263,14 @@ function runMathChecks(parsed: ParsedXml): ValidationIssue[] {
   pushAll(checkITBISRates(xml, lines))
   push(checkMontoTotal(xml, lines))
   push(checkValorPagar(xml, lines))
+  pushAll(checkOtraMonedaTotals(xml, lines))
+  // Only check TotalCif math for E-46 — for other types the cross-field check
+  // already fires a red "forbidden field" error; a second orange math error
+  // for the same field would be redundant noise.
+  if (parsed.invoiceType === 'E-46') {
+    pushAll(checkTotalCif(xml, lines))
+  }
+  pushAll(checkHeaderImpuestosAdicionales(xml, lines))
 
   return issues
 }

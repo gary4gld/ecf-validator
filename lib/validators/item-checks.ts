@@ -697,7 +697,8 @@ function checkItemSumVsHeader(
 }
 
 
-import { validateTasaISC, ISC_ALCOHOL_CODES } from './isc-rates'
+// isc-rates.ts is imported in format-checks.ts (validateTasaISC for header-level validation)
+// TasaImpuestoAdicional validation is pending — see VALIDATION_LIMITATIONS.md item 11
 
 /**
  * Valid TipoImpuesto codes from ImpuestosAdicionalesType (XSD enum 001-039).
@@ -793,31 +794,10 @@ function checkISCProductFields(
       return
     }
 
-    // TasaImpuestoAdicional rate validation against DGII quarterly resolution
-    // Applies to codes 006–022 (ISC específico alcohol) per PDF field 106 validation rule.
-    const tasaEl = el.closest('ImpuestoAdicional')?.querySelector('TasaImpuestoAdicional')
-    if (tasaEl && ISC_ALCOHOL_CODES.has(val)) {
-      const tasaDeclared = parseFloat(tasaEl.textContent?.trim() ?? '')
-      if (!isNaN(tasaDeclared)) {
-        const result = validateTasaISC(val, tasaDeclared, fechaEmision)
-        if (result.status === 'mismatch') {
-          issues.push({
-            id: nextId(), severity: 'orange', field: 'TasaImpuestoAdicional', line: baseLine,
-            message: `Ítem ${lineaNum}: TasaImpuestoAdicional (${tasaDeclared.toFixed(2)}) no coincide con la tasa vigente para el período de la FechaEmision — se esperan ${result.expected.toFixed(2)} RD$/L según ${result.resolution}. Esta tasa varía trimestralmente por inflación.`,
-          })
-        } else if (result.status === 'unconfirmed') {
-          issues.push({
-            id: nextId(), severity: 'blue', field: 'TasaImpuestoAdicional', line: baseLine,
-            message: `Ítem ${lineaNum}: La tasa ISC para el período ${result.key} (${result.resolution}) no está confirmada en nuestra tabla. Verifica contra la resolución DDG-AR1 vigente en dgii.gov.do/legislacion/resoluciones/.`,
-          })
-        } else if (result.status === 'period_unknown') {
-          issues.push({
-            id: nextId(), severity: 'blue', field: 'TasaImpuestoAdicional', line: baseLine,
-            message: `Ítem ${lineaNum}: No se encontró la tasa ISC para el período ${result.key}. Verifica la resolución DDG-AR1 correspondiente en dgii.gov.do/legislacion/resoluciones/.`,
-          })
-        }
-      }
-    }
+    // NOTE: TasaImpuestoAdicional does NOT exist inside item-level TablaImpuestoAdicional.
+    // Per XSD, ImpuestoAdicional at the item level contains only TipoImpuesto.
+    // TasaImpuestoAdicional lives in the HEADER Totales > ImpuestosAdicionales section.
+    // Rate validation belongs there and is tracked in VALIDATION_LIMITATIONS.md item 11.
 
     // E-44: only codes 001-005 allowed (footnote 18/19 — ISC específico no aplica)
     if (invoiceType === 'E-44' && ISC_PRODUCT_CODES.has(val)) {
@@ -889,6 +869,53 @@ function checkTipoDescuentoRecargo(
   return issues
 }
 
+// ── OtraMonedaDetalle cross-currency item math ────────────────────────────────
+
+/**
+ * When an item has <OtraMonedaDetalle>, validates that:
+ *   MontoItemOtraMoneda × TipoCambio ≈ MontoItem
+ *
+ * No IndicadorMontoGravado handling needed — MontoItemOtraMoneda is the final
+ * item amount in foreign currency, directly equivalent to MontoItem in DOP.
+ *
+ * Tolerance: max(0.50, 1% of MontoItemOtraMoneda) to cover exchange-rate
+ * rounding drift (TipoCambio has up to 4 decimal places).
+ */
+function checkOtraMonedaDetalle(
+  item:      Element,
+  lineaNum:  number,
+  lines:     XmlLine[],
+  tipoCambio: number | null
+): ValidationIssue | null {
+  if (!tipoCambio || tipoCambio <= 0) return null
+
+  const detalle = item.querySelector(':scope > OtraMonedaDetalle')
+  if (!detalle) return null
+
+  const montoOMStr  = detalle.querySelector('MontoItemOtraMoneda')?.textContent?.trim()
+  const montoDOPStr = item.querySelector(':scope > MontoItem')?.textContent?.trim()
+
+  if (!montoOMStr || !montoDOPStr) return null
+
+  const montoOM  = parseFloat(montoOMStr)
+  const montoDOP = parseFloat(montoDOPStr)
+
+  if (isNaN(montoOM) || isNaN(montoDOP)) return null
+
+  const expected = Math.round((montoDOP / tipoCambio) * 100) / 100
+  const tol      = Math.max(0.50, Math.round(montoOM * 0.01 * 100) / 100)
+
+  if (Math.abs(montoOM - expected) > tol) {
+    return {
+      id: nextId(), severity: 'orange',
+      field: 'MontoItemOtraMoneda',
+      line: findItemLine(lineaNum, lines),
+      message: `Ítem ${lineaNum}: MontoItemOtraMoneda (${montoOM.toFixed(2)}) no coincide con MontoItem (${montoDOP.toFixed(2)}) ÷ TipoCambio (${tipoCambio}): ${expected.toFixed(2)}. Diferencia: ${Math.abs(montoOM - expected).toFixed(2)}.`,
+    }
+  }
+  return null
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
@@ -913,6 +940,10 @@ export function runItemChecks(
 
   // Extract FechaEmision once — needed for ISC rate period lookup
   const fechaEmision = doc.querySelector('FechaEmision')?.textContent?.trim() ?? ''
+
+  // Extract TipoCambio once — needed for OtraMonedaDetalle cross-currency check
+  const tipoCambioStr = doc.querySelector('TipoCambio')?.textContent?.trim()
+  const tipoCambio = tipoCambioStr ? parseFloat(tipoCambioStr) : null
 
   // 1. NumeroLinea sequential check (document-level)
   issues.push(...checkNumeroLinea(items, lines))
@@ -945,6 +976,9 @@ export function runItemChecks(
 
     const mathIssue = checkMontoItem(item, lineaNum, lines)
     if (mathIssue) issues.push(mathIssue)
+
+    const otraMonedaIssue = checkOtraMonedaDetalle(item, lineaNum, lines, tipoCambio)
+    if (otraMonedaIssue) issues.push(otraMonedaIssue)
   }
 
   // 3. Retention totals vs sum of per-item MontoITBISRetenido/MontoISRRetenido

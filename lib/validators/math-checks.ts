@@ -29,6 +29,7 @@
  */
 
 import type { ValidationIssue, XmlLine } from '../types'
+import { validateTasaISC, ISC_ALCOHOL_CODES, VALID_ISC_CODES } from './isc-rates'
 
 // ── Internals ─────────────────────────────────────────────────────────────────
 
@@ -289,4 +290,245 @@ export function checkValorPagar(
 /** Reset the math issue ID counter (call at start of each validation run). */
 export function resetMathCounter(): void {
   _mathCounter = 0
+}
+
+// ── Check 8: Header ImpuestosAdicionales — TipoImpuesto enum + TasaImpuestoAdicional ──────────
+
+/**
+ * Validates each <ImpuestoAdicional> entry in the HEADER section:
+ *   Totales > ImpuestosAdicionales > ImpuestoAdicional
+ *
+ * (Distinct from item-level TablaImpuestoAdicional which contains only TipoImpuesto.)
+ *
+ * Checks:
+ *   a) TipoImpuesto must be a valid code 001–039 (red if not)
+ *   b) For codes 006–022 (ISC específico alcohol), TasaImpuestoAdicional must match
+ *      the DGII quarterly rate for the FechaEmision period (orange if mismatch,
+ *      blue informational if rate not yet confirmed in isc-rates.ts table)
+ *
+ * Source: PDF field 106, validation rules a-c. XSD: ImpuestosAdicionalesType.
+ */
+export function checkHeaderImpuestosAdicionales(
+  xml:   string,
+  lines: XmlLine[]
+): ValidationIssue[] {
+  // Only proceed if the header ImpuestosAdicionales section exists
+  const headerMatch = xml.match(/<ImpuestosAdicionales>([\s\S]*?)<\/ImpuestosAdicionales>/)
+  if (!headerMatch) return []
+
+  const issues: ValidationIssue[] = []
+  const headerSection  = headerMatch[1]
+  const fechaEmision = (xml.match(/<FechaEmision>([^<]+)<\/FechaEmision>/) ?? [])[1]?.trim() ?? ''
+
+  // Iterate over each ImpuestoAdicional entry (maxOccurs=20 per XSD)
+  const blocks = headerSection.match(/<ImpuestoAdicional>[\s\S]*?<\/ImpuestoAdicional>/g) ?? []
+
+  for (const block of blocks) {
+    const tipoMatch = block.match(/<TipoImpuesto>([^<]+)<\/TipoImpuesto>/)
+    if (!tipoMatch) continue
+
+    const tipo = tipoMatch[1].trim()
+
+    // a) TipoImpuesto enum: must be 001–039
+    if (!VALID_ISC_CODES.has(tipo)) {
+      issues.push({
+        id: nextId(), severity: 'red',
+        field: 'TipoImpuesto',
+        line: findLine(/<TipoImpuesto>/, lines),
+        message: `TipoImpuesto "${tipo}" en la sección ImpuestosAdicionales (Totales) es inválido. Los valores aceptados son 001–039 según la Tabla I del Formato eCF.`,
+      })
+      continue
+    }
+
+    // b) TasaImpuestoAdicional rate check for ISC alcohol codes 006–022
+    const tasaMatch = block.match(/<TasaImpuestoAdicional>([^<]+)<\/TasaImpuestoAdicional>/)
+    if (!tasaMatch || !ISC_ALCOHOL_CODES.has(tipo)) continue
+
+    const tasaDeclared = parseFloat(tasaMatch[1].trim())
+    if (isNaN(tasaDeclared)) continue
+
+    const result = validateTasaISC(tipo, tasaDeclared, fechaEmision)
+
+    if (result.status === 'mismatch') {
+      issues.push({
+        id: nextId(), severity: 'orange',
+        field: 'TasaImpuestoAdicional',
+        line: findLine(/<TasaImpuestoAdicional>/, lines),
+        message: `TasaImpuestoAdicional (${fmt(tasaDeclared)}) para TipoImpuesto ${tipo} no coincide con la tasa vigente según ${result.resolution}: se esperan ${fmt(result.expected)} RD$/L. Esta tasa varía trimestralmente por inflación (resoluciones DDG-AR1, dgii.gov.do/legislacion/resoluciones/).`,
+      })
+    } else if (result.status === 'unconfirmed') {
+      issues.push({
+        id: nextId(), severity: 'blue',
+        field: 'TasaImpuestoAdicional',
+        line: findLine(/<TasaImpuestoAdicional>/, lines),
+        message: `TasaImpuestoAdicional: la tasa ISC para el período ${result.key} (${result.resolution}) no está confirmada en nuestra tabla. Verifica contra la resolución DDG-AR1 vigente en dgii.gov.do/legislacion/resoluciones/.`,
+      })
+    } else if (result.status === 'period_unknown') {
+      issues.push({
+        id: nextId(), severity: 'blue',
+        field: 'TasaImpuestoAdicional',
+        line: findLine(/<TasaImpuestoAdicional>/, lines),
+        message: `TasaImpuestoAdicional: no se encontró tasa ISC para el período derivado de la FechaEmision. Verifica la resolución DDG-AR1 correspondiente en dgii.gov.do/legislacion/resoluciones/.`,
+      })
+    }
+  }
+
+  return issues
+}
+
+// ── Check 6: OtraMoneda section totals ────────────────────────────────────────
+
+/**
+ * Validates internal consistency of the <OtraMoneda> section when present.
+ * All fields are optional (minOccurs=0), so each check only fires when the
+ * relevant fields are actually present in the document.
+ *
+ * Formulas (from PDF field definitions 123-135):
+ *   MontoGravadoTotalOtraMoneda = MontoGravado1 + MontoGravado2 + MontoGravado3
+ *   TotalITBISOtraMoneda        = TotalITBIS1   + TotalITBIS2   + TotalITBIS3
+ *   MontoTotalOtraMoneda        = MontoGravadoTotalOtraMoneda + MontoExentoOtraMoneda + TotalITBISOtraMoneda + MontoImpuestoAdicionalOtraMoneda
+ *   Cross-check (informational): MontoTotalOtraMoneda ≈ MontoTotal / TipoCambio
+ */
+export function checkOtraMonedaTotals(
+  xml:   string,
+  lines: XmlLine[]
+): ValidationIssue[] {
+  if (!/<OtraMoneda>/.test(xml)) return []
+  const issues: ValidationIssue[] = []
+
+  // Convenience alias — already handles null/NaN
+  const g = (field: string): number | null => getNum(field, xml)
+
+  // ── MontoGravadoTotalOtraMoneda = MontoGravado1 + MontoGravado2 + MontoGravado3
+  const g1    = g('MontoGravado1OtraMoneda')
+  const g2    = g('MontoGravado2OtraMoneda')
+  const g3    = g('MontoGravado3OtraMoneda')
+  const gTot  = g('MontoGravadoTotalOtraMoneda')
+  if (gTot !== null && (g1 !== null || g2 !== null || g3 !== null)) {
+    const expected = round2((g1 ?? 0) + (g2 ?? 0) + (g3 ?? 0))
+    if (Math.abs(gTot - expected) > TOLERANCE) {
+      issues.push({
+        id: nextId(), severity: 'orange',
+        field: 'MontoGravadoTotalOtraMoneda',
+        line: findLine(/<MontoGravadoTotalOtraMoneda>/, lines),
+        message: `MontoGravadoTotalOtraMoneda (${fmt(gTot)}) no coincide con MontoGravado1 + MontoGravado2 + MontoGravado3 OtraMoneda: ${fmt(expected)}. Diferencia: ${fmt(Math.abs(gTot - expected))}.`,
+      })
+    }
+  }
+
+  // ── TotalITBISOtraMoneda = TotalITBIS1 + TotalITBIS2 + TotalITBIS3
+  const i1    = g('TotalITBIS1OtraMoneda')
+  const i2    = g('TotalITBIS2OtraMoneda')
+  const i3    = g('TotalITBIS3OtraMoneda')
+  const iTot  = g('TotalITBISOtraMoneda')
+  if (iTot !== null && (i1 !== null || i2 !== null || i3 !== null)) {
+    const expected = round2((i1 ?? 0) + (i2 ?? 0) + (i3 ?? 0))
+    if (Math.abs(iTot - expected) > TOLERANCE) {
+      issues.push({
+        id: nextId(), severity: 'orange',
+        field: 'TotalITBISOtraMoneda',
+        line: findLine(/<TotalITBISOtraMoneda>/, lines),
+        message: `TotalITBISOtraMoneda (${fmt(iTot)}) no coincide con TotalITBIS1 + TotalITBIS2 + TotalITBIS3 OtraMoneda: ${fmt(expected)}. Diferencia: ${fmt(Math.abs(iTot - expected))}.`,
+      })
+    }
+  }
+
+  // ── MontoTotalOtraMoneda = MontoGravadoTotalOtraMoneda + MontoExentoOtraMoneda + TotalITBISOtraMoneda + MontoImpuestoAdicionalOtraMoneda
+  const exento    = g('MontoExentoOtraMoneda')
+  const impAdicOM = g('MontoImpuestoAdicionalOtraMoneda')
+  const mTot      = g('MontoTotalOtraMoneda')
+  if (mTot !== null && gTot !== null && iTot !== null) {
+    const expected = round2(gTot + (exento ?? 0) + iTot + (impAdicOM ?? 0))
+    if (Math.abs(mTot - expected) > TOLERANCE) {
+      issues.push({
+        id: nextId(), severity: 'orange',
+        field: 'MontoTotalOtraMoneda',
+        line: findLine(/<MontoTotalOtraMoneda>/, lines),
+        message: `MontoTotalOtraMoneda (${fmt(mTot)}) no coincide con MontoGravadoTotalOtraMoneda + MontoExentoOtraMoneda + TotalITBISOtraMoneda + MontoImpuestoAdicionalOtraMoneda: ${fmt(expected)}. Diferencia: ${fmt(Math.abs(mTot - expected))}.`,
+      })
+    }
+  }
+
+  // ── Cross-check: MontoTotalOtraMoneda ≈ MontoTotal / TipoCambio
+  const montoTotal = g('MontoTotal')
+  const tipoCambio = g('TipoCambio')
+  if (mTot !== null && montoTotal !== null && tipoCambio !== null && tipoCambio > 0) {
+    const expected = round2(montoTotal / tipoCambio)
+    const tol = Math.max(0.50, round2(mTot * 0.01))
+    if (Math.abs(mTot - expected) > tol) {
+      issues.push({
+        id: nextId(), severity: 'yellow',
+        field: 'MontoTotalOtraMoneda',
+        line: findLine(/<MontoTotalOtraMoneda>/, lines),
+        message: `MontoTotalOtraMoneda (${fmt(mTot)}) difiere significativamente de MontoTotal (${fmt(montoTotal)}) ÷ TipoCambio (${tipoCambio}): ${fmt(expected)}. Diferencia: ${fmt(Math.abs(mTot - expected))}. Verifica la consistencia del tipo de cambio y los montos en otra moneda.`,
+      })
+    }
+
+    // Per-rate cross-checks: MontoGravadoTotalOtraMoneda ≈ MontoGravadoTotal / TipoCambio
+    //                         TotalITBISOtraMoneda       ≈ TotalITBIS / TipoCambio
+    // Yellow (informational) — exchange rate rounding legitimately causes small differences.
+    const mGravadoTotal = g('MontoGravadoTotal')
+    if (gTot !== null && mGravadoTotal !== null) {
+      const exp = round2(mGravadoTotal / tipoCambio)
+      const t   = Math.max(0.50, round2(gTot * 0.01))
+      if (Math.abs(gTot - exp) > t) {
+        issues.push({
+          id: nextId(), severity: 'yellow',
+          field: 'MontoGravadoTotalOtraMoneda',
+          line: findLine(/<MontoGravadoTotalOtraMoneda>/, lines),
+          message: `MontoGravadoTotalOtraMoneda (${fmt(gTot)}) difiere de MontoGravadoTotal (${fmt(mGravadoTotal)}) ÷ TipoCambio (${tipoCambio}): ${fmt(exp)}. Diferencia: ${fmt(Math.abs(gTot - exp))}.`,
+        })
+      }
+    }
+
+    const totalITBIS = g('TotalITBIS')
+    if (iTot !== null && totalITBIS !== null) {
+      const exp = round2(totalITBIS / tipoCambio)
+      const t   = Math.max(0.50, round2(iTot * 0.01))
+      if (Math.abs(iTot - exp) > t) {
+        issues.push({
+          id: nextId(), severity: 'yellow',
+          field: 'TotalITBISOtraMoneda',
+          line: findLine(/<TotalITBISOtraMoneda>/, lines),
+          message: `TotalITBISOtraMoneda (${fmt(iTot)}) difiere de TotalITBIS (${fmt(totalITBIS)}) ÷ TipoCambio (${tipoCambio}): ${fmt(exp)}. Diferencia: ${fmt(Math.abs(iTot - exp))}.`,
+        })
+      }
+    }
+  }
+
+  return issues
+}
+
+// ── Check 7: TotalCif = TotalFob + Seguro + Flete + OtrosGastos (E-46) ────────
+
+/**
+ * When TotalCif is present alongside at least one of its components, validates
+ * that TotalCif = TotalFob + Seguro + Flete + OtrosGastos (absent fields = 0).
+ * Applies to all types since the fields are in InformacionesAdicionales, but in
+ * practice only E-46 invoices will ever have these fields.
+ */
+export function checkTotalCif(
+  xml:   string,
+  lines: XmlLine[]
+): ValidationIssue[] {
+  const totalCif = getNum('TotalCif', xml)
+  if (totalCif === null) return []
+
+  const g = (f: string): number => getNum(f, xml) ?? 0
+
+  const fob    = g('TotalFob')
+  const seguro = g('Seguro')
+  const flete  = g('Flete')
+  const otros  = g('OtrosGastos')
+
+  const expected = round2(fob + seguro + flete + otros)
+  if (Math.abs(totalCif - expected) > TOLERANCE) {
+    return [{
+      id: nextId(), severity: 'orange',
+      field: 'TotalCif',
+      line: findLine(/<TotalCif>/, lines),
+      message: `TotalCif (${fmt(totalCif)}) no coincide con TotalFob (${fmt(fob)}) + Seguro (${fmt(seguro)}) + Flete (${fmt(flete)}) + OtrosGastos (${fmt(otros)}) = ${fmt(expected)}. Diferencia: ${fmt(Math.abs(totalCif - expected))} DOP.`,
+    }]
+  }
+  return []
 }

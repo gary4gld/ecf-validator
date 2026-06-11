@@ -446,3 +446,112 @@ export function checkFormaPagoSum(
   }
   return null
 }
+
+// ── Rule 11: Paginacion vs TotalPaginas consistency — item #14 ────────────────
+
+/**
+ * Validates consistency between the <Paginacion> section and <TotalPaginas>.
+ * Source: PDF field 19 (TotalPaginas) and Paginacion section rules (p.50).
+ *   - TotalPaginas is conditional on Paginacion existing (footnote 77)
+ *   - TotalPaginas must equal the count of <Pagina> entries
+ *   - PaginaNo must be sequential (1, 2, 3...)
+ *   - NoLineaDesde ≤ NoLineaHasta within each Pagina
+ */
+export function checkPaginacion(
+  xml: string,
+  lines: XmlLine[]
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+
+  const hasPaginacion = /<Paginacion>/.test(xml)
+  const totalPaginasStr = getValue('TotalPaginas', xml)
+
+  // TotalPaginas without Paginacion section
+  if (totalPaginasStr && !hasPaginacion) {
+    issues.push({
+      id: nextId(), severity: 'red',
+      field: 'TotalPaginas',
+      line: findLine(/<TotalPaginas>/, lines),
+      message: `TotalPaginas (${totalPaginasStr}) está presente pero falta la sección <Paginacion>. Ambos deben estar presentes cuando el e-CF tiene más de una página.`,
+    })
+    return issues
+  }
+
+  // Paginacion without TotalPaginas
+  if (hasPaginacion && !totalPaginasStr) {
+    issues.push({
+      id: nextId(), severity: 'red',
+      field: 'TotalPaginas',
+      line: findLine(/<Paginacion>/, lines),
+      message: 'La sección <Paginacion> está presente pero falta <TotalPaginas> en IdDoc. TotalPaginas es obligatorio cuando existen múltiples páginas.',
+    })
+  }
+
+  if (!hasPaginacion) return issues
+
+  // Count <Pagina> entries and validate each
+  const paginaBlocks = xml.match(/<Pagina>[\s\S]*?<\/Pagina>/g) ?? []
+  const pageCount = paginaBlocks.length
+
+  // TotalPaginas must equal count of Pagina entries
+  if (totalPaginasStr) {
+    const totalPaginas = parseInt(totalPaginasStr, 10)
+    if (!isNaN(totalPaginas) && pageCount !== totalPaginas) {
+      issues.push({
+        id: nextId(), severity: 'red',
+        field: 'TotalPaginas',
+        line: findLine(/<TotalPaginas>/, lines),
+        message: `TotalPaginas declara ${totalPaginas} página(s) pero la sección <Paginacion> contiene ${pageCount} entrada(s) <Pagina>. Ambos valores deben coincidir.`,
+      })
+    }
+    if (!isNaN(totalPaginas) && totalPaginas < 2) {
+      issues.push({
+        id: nextId(), severity: 'red',
+        field: 'TotalPaginas',
+        line: findLine(/<TotalPaginas>/, lines),
+        message: `TotalPaginas=${totalPaginas} es inválido. El tipo XSD Integer4ValidationTypeMayorUno requiere un valor mayor que 1 — DGII rechazará el documento. La sección <Paginacion> solo aplica cuando el e-CF tiene más de una página impresa.`,
+      })
+    }
+  }
+
+  // Validate PaginaNo sequential order and NoLineaDesde ≤ NoLineaHasta
+  const expectedNos = Array.from({length: pageCount}, (_, i) => i + 1)
+  const seenNos: number[] = []
+
+  for (const block of paginaBlocks) {
+    const paginaNoM = block.match(/<PaginaNo>(\d+)<\/PaginaNo>/)
+    const desdeM    = block.match(/<NoLineaDesde>(\d+)<\/NoLineaDesde>/)
+    const hastaM    = block.match(/<NoLineaHasta>(\d+)<\/NoLineaHasta>/)
+
+    if (paginaNoM) {
+      const no = parseInt(paginaNoM[1], 10)
+      seenNos.push(no)
+    }
+
+    if (desdeM && hastaM) {
+      const desde = parseInt(desdeM[1], 10)
+      const hasta = parseInt(hastaM[1], 10)
+      if (desde > hasta) {
+        issues.push({
+          id: nextId(), severity: 'red',
+          field: 'NoLineaDesde',
+          line: findLine(/<NoLineaDesde>/, lines),
+          message: `NoLineaDesde (${desde}) es mayor que NoLineaHasta (${hasta}) en una entrada <Pagina>. El rango de líneas debe ser ascendente.`,
+        })
+      }
+    }
+  }
+
+  // Check PaginaNo sequential order (1, 2, 3...)
+  const sortedNos = [...seenNos].sort((a, b) => a - b)
+  if (seenNos.length > 0 && JSON.stringify(sortedNos) !== JSON.stringify(expectedNos)) {
+    issues.push({
+      id: nextId(), severity: 'red',
+      field: 'PaginaNo',
+      line: findLine(/<PaginaNo>/, lines),
+      message: `Los valores de PaginaNo no son secuenciales. Se encontraron: [${sortedNos.join(', ')}]. Deben ser [${expectedNos.join(', ')}] comenzando en 1.`,
+    })
+  }
+
+  return issues
+}
