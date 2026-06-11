@@ -39,7 +39,7 @@ export const PATTERNS = {
   /**
    * CorreoValidationType: standard email format (max 80 chars enforced separately).
    */
-  Email: /^\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*/,
+  Email: /^\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*$/,
 
   /**
    * CodigoSeguridadeCFType (RFCE only): exactly 6 characters, any content.
