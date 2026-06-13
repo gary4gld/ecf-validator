@@ -505,6 +505,24 @@ export function checkForbiddenFields(
     })
   }
 
+  // E-41 and E-43: The entire <Transporte> section is absent from these XSD
+  // schemas (obligation code 0 for the whole area, Formato e-CF PDF page 17).
+  // Any <Transporte> content causes a DGII rejection with "element is not expected".
+  //
+  // E-47 is intentionally NOT included here: although the PDF section-header row
+  // also shows 0 for E-47, the e-CF 47 XSD DOES define <Transporte> containing a
+  // single <PaisDestino> child (field 81 = opcional/3 for E-47). E-47's other
+  // Transporte children are already forbidden by the e46OnlyFields loop below,
+  // and PaisDestino is explicitly allowed there.
+  if ((invoiceType === 'E-41' || invoiceType === 'E-43') && /<Transporte>/.test(xml)) {
+    issues.push({
+      id: nextId(), severity: 'red',
+      field: 'Transporte',
+      line: findLine(/<Transporte>/, lines),
+      message: `La sección <Transporte> completa tiene código de obligatoriedad 0 para ${invoiceType} — no existe en el esquema XSD de este tipo. Su presencia causará rechazo por DGII con el error "element is not expected".`,
+    })
+  }
+
   // IdentificadorExtranjero is forbidden (obligation code 0) in E-31, E-41, E-45.
   // Source: PDF obligation table field 39.
   const ieForbiddenTypes = new Set<InvoiceType>(['E-31', 'E-41', 'E-45'])
@@ -565,7 +583,20 @@ export function checkForbiddenFields(
       // Comprador
       ['PaisComprador',          'PaisComprador'],
     ]
+
+    // For E-41/E-43 the whole <Transporte> section is already flagged once at the
+    // wrapper level above. Its child fields only ever appear nested inside it, so
+    // skip the per-child Transporte checks for those two types to avoid reporting
+    // the same root cause twice. They still fire for E-31/32/33/34/44/45/47.
+    const transporteChildren = new Set([
+      'ViaTransporte', 'PaisOrigen', 'DireccionDestino',
+      'RNCIdentificacionCompaniaTransportista', 'NombreCompaniaTransportista', 'NumeroViaje',
+    ])
+    const transporteWrapperFlagged =
+      (invoiceType === 'E-41' || invoiceType === 'E-43') && /<Transporte>/.test(xml)
+
     for (const [field, label] of e46OnlyFields) {
+      if (transporteWrapperFlagged && transporteChildren.has(field)) continue
       if (new RegExp(`<${field}>`).test(xml)) {
         issues.push({
           id: nextId(), severity: 'red',
