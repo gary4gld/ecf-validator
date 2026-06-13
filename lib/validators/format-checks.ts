@@ -616,7 +616,7 @@ export function validateProvinciaMunicipio(
     if (!PROVINCIA_CODES.has(code)) {
       const hint = MUNICIPIO_CODES.has(code)
         ? ` "${code}" es un código de municipio — en <${field}> se espera el código de provincia (ej. "020000" para Azua).`
-        : ` Usa el código de 6 dígitos de la Tabla III, ej. "010000" para el Distrito Nacional, "020000" para Azua.`
+        : ` El campo no acepta nombres de lugar — usa el código de 6 dígitos de la Tabla III, ej. "010000" para el Distrito Nacional, "020000" para Azua.`
       issues.push({
         id: nextId(), severity: 'red',
         field,
@@ -652,6 +652,7 @@ export function validateProvinciaMunicipio(
 
   return issues
 }
+
 export function validateFormaPagoValues(xml: string, lines: XmlLine[]): ValidationIssue[] {
   const issues: ValidationIssue[] = []
   if (!/<TablaFormasPago>/.test(xml)) return issues
