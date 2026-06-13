@@ -66,16 +66,22 @@ export const MAX_LENGTHS: Record<string, number> = {
   RutaVenta:                   20,
   InformacionAdicionalEmisor: 250,
   NumeroFacturaInterna:        20,
+  NumeroPedidoInterno:         20,
 
   // Comprador
   RazonSocialComprador:       150,  // optional in E-32/33/34 — keep YELLOW
   ContactoComprador:           80,
   DireccionComprador:         100,
   CorreoComprador:             80,
+  InformacionAdicionalComprador: 250,
+  NumeroOrdenCompra:           20,
+  ContactoEntrega:            100,
+  DireccionEntrega:           100,
 
   // Item
   NombreItem:                  80,  // minOccurs=1 — RED on violation
   DescripcionItem:           1000,
+  CodigoItem:                  35,  // AlfaNum35Type — DGII error code 233 on violation
 
   // Misc
   BancoPago:                   75,
