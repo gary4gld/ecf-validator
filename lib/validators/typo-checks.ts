@@ -180,6 +180,13 @@ export const KNOWN_FIELDS = new Set<string>([
   'PrecioOtraMoneda', 'DescuentoOtraMoneda', 'RecargoOtraMoneda', 'MontoItemOtraMoneda',
   'MontoItem',
 
+  'ImpuestosAdicionalesOtraMoneda',  // OtraMoneda mirror of header ImpuestosAdicionales block
+  'TipoImpuestoOtraMoneda',
+  'TasaImpuestoAdicionalOtraMoneda',
+  'MontoImpuestoSelectivoConsumoEspecificoOtraMoneda',
+  'MontoImpuestoSelectivoConsumoAdvaloremOtraMoneda',
+  'OtrosImpuestosAdicionalesOtraMoneda',
+
   // ── ImpuestosAdicionales (item-level) ──
   'ImpuestosAdicionales', 'ImpuestoAdicional',
   'TipoImpuesto', 'TasaImpuestoAdicional',
