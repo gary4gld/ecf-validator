@@ -45,6 +45,7 @@ import {
   validateNumericPositivity,
   validateUnidadMedida,
   validateTipoMoneda,
+  validateProvinciaMunicipio,
 } from './format-checks'
 import {
   resetCrossCounter,
@@ -192,6 +193,7 @@ function runFormatChecks(parsed: ParsedXml): ValidationIssue[] {
   pushAll(validateFormaPagoValues(xml, lines))
   push(validateIndicadorNotaCredito(xml, lines))
   pushAll(validateTipoMoneda(xml, lines))
+  pushAll(validateProvinciaMunicipio(xml, lines))
   pushAll(validateNumericPositivity(xml, lines))
   pushAll(validateUnidadMedida(xml, lines))
 

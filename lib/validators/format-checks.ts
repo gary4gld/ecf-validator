@@ -12,6 +12,8 @@
 
 import type { ValidationIssue, XmlLine } from '../types'
 import { PATTERNS, MAX_LENGTHS, REQUIRED_MAX_LENGTH_FIELDS } from './schema-types'
+import { PROVINCIA_CODES } from './provincia-codes'
+import { MUNICIPIO_CODES } from './municipio-codes'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -585,6 +587,70 @@ export function validateTipoMoneda(
     line: findLine(/<TipoMoneda>/, lines),
     message: `TipoMoneda "${val}" no es un código válido según la Tabla II de Codificación Monedas del Formato eCF. Códigos aceptados: ${[...TIPO_MONEDA_CODES].join(', ')}.`,
   }]
+}
+
+// ── Provincia / Municipio: Tabla III ──────────────────────────────────────────
+
+/**
+ * Validates Municipio, Provincia, MunicipioComprador, ProvinciaComprador against
+ * ProvinciaMunicipioType — the complete 6-digit code enum from Tabla III.
+ * Source: PDF fields 25, 26, 44, 45. Validation rule: "Validar con código de la Tabla III".
+ */
+export function validateProvinciaMunicipio(
+  xml:   string,
+  lines: XmlLine[]
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+
+  // Province fields: must be an XX0000 province-level code
+  const provinciaFields: Array<[string, RegExp]> = [
+    ['Provincia',          /<Provincia>/],
+    ['ProvinciaComprador', /<ProvinciaComprador>/],
+  ]
+
+  for (const [field, lineRegex] of provinciaFields) {
+    const val = getValue(field, xml)
+    if (!val) continue
+    const code = val.trim()
+
+    if (!PROVINCIA_CODES.has(code)) {
+      const hint = MUNICIPIO_CODES.has(code)
+        ? ` "${code}" es un código de municipio — en <${field}> se espera el código de provincia (ej. "020000" para Azua).`
+        : ` Usa el código de 6 dígitos de la Tabla III, ej. "010000" para el Distrito Nacional, "020000" para Azua.`
+      issues.push({
+        id: nextId(), severity: 'red',
+        field,
+        line: findLine(lineRegex, lines),
+        message: `${field} "${code}" no es un código de provincia válido según la Tabla III.${hint}`,
+      })
+    }
+  }
+
+  // Municipality/district fields: must be an XXYY00 or XXYYZZ code (YY ≠ 00)
+  const municipioFields: Array<[string, RegExp]> = [
+    ['Municipio',          /<Municipio>/],
+    ['MunicipioComprador', /<MunicipioComprador>/],
+  ]
+
+  for (const [field, lineRegex] of municipioFields) {
+    const val = getValue(field, xml)
+    if (!val) continue
+    const code = val.trim()
+
+    if (!MUNICIPIO_CODES.has(code)) {
+      const hint = PROVINCIA_CODES.has(code)
+        ? ` "${code}" es un código de provincia — en <${field}> se espera el código del municipio (ej. "020100" para Municipio Azua).`
+        : ` Usa el código de 6 dígitos de la Tabla III, ej. "010100" para Santo Domingo de Guzmán, "020100" para Municipio Azua. El campo no acepta nombres de lugar.`
+      issues.push({
+        id: nextId(), severity: 'red',
+        field,
+        line: findLine(lineRegex, lines),
+        message: `${field} "${code}" no es un código de municipio válido según la Tabla III.${hint}`,
+      })
+    }
+  }
+
+  return issues
 }
 export function validateFormaPagoValues(xml: string, lines: XmlLine[]): ValidationIssue[] {
   const issues: ValidationIssue[] = []
