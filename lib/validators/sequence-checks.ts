@@ -208,10 +208,20 @@ const COMPRADOR_SEQUENCES: Partial<Record<InvoiceType, string[]>> = {
     'IdentificadorExtranjero',
     'RazonSocialComprador',
   ],
+  // E-46 Comprador — includes IdentificadorExtranjero (pos 2) and PaisComprador (pos 9)
+  // which are absent from the E-31 shared sequence. Source: e-CF_46_v_1_0.xsd:74-96.
+  'E-46': [
+    'RNCComprador', 'IdentificadorExtranjero', 'RazonSocialComprador',
+    'ContactoComprador', 'CorreoComprador', 'DireccionComprador',
+    'MunicipioComprador', 'ProvinciaComprador', 'PaisComprador',
+    'FechaEntrega', 'ContactoEntrega', 'DireccionEntrega', 'TelefonoAdicional',
+    'FechaOrdenCompra', 'NumeroOrdenCompra', 'CodigoInternoComprador',
+    'ResponsablePago', 'InformacionAdicionalComprador',
+  ],
 }
 
-// Types that share the E-31 full Comprador sequence
-const COMPRADOR_FULL_TYPES: InvoiceType[] = ['E-33', 'E-34', 'E-44', 'E-45', 'E-46']
+// Types that share the E-31 full Comprador sequence (E-46 now has its own entry above)
+const COMPRADOR_FULL_TYPES: InvoiceType[] = ['E-33', 'E-34', 'E-44', 'E-45']
 
 /**
  * Totales field sequence — same for all ECF types that have it.
