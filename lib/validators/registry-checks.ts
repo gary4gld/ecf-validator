@@ -98,7 +98,22 @@ async function checkSingleRNC(
     return issues
   }
 
-  // RNC not found in registry
+  // Megaplus returned an error response — distinguish service failures from genuine "not found".
+  // A genuine "not found" has codigo_http=404. Any other error code (200, 500, etc. with
+  // error:true) indicates a Megaplus API issue (suspended state, unexpected response, etc.)
+  // and should not be treated as a confirmed "not registered" result.
+  if (data.error && data.codigo_http !== 404) {
+    issues.push({
+      id: nextId(),
+      severity: 'yellow',
+      field: fieldName,
+      line: null,
+      message: `No se pudo verificar ${fieldName} "${rnc}" en el registro DGII — el servicio de consulta respondió con un error inesperado. Verifica manualmente en Megaplus o intenta de nuevo más tarde.`,
+    })
+    return issues
+  }
+
+  // RNC genuinely not found in registry (Megaplus returned 404)
   if (data.error || data.codigo_http === 404 || !data.estado) {
     issues.push({
       id: nextId(),
