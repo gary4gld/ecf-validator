@@ -257,6 +257,60 @@ function checkIndicadorBienoServicio(
   return issues
 }
 
+// ── Mineria — enum values (item-level, E-32/33/34/46 only) ────────────────────
+
+/**
+ * Validates the Mineria sub-section enums when it is present and allowed.
+ * Mineria exists only in E-32/33/34/46 (Formato e-CF PDF p.40). Its presence in
+ * any other type is caught at the wrapper level by checkForbiddenFields, so this
+ * check is guarded to the four allowed types to avoid double-reporting.
+ *
+ * Enums (from XSD TipoAfiliacionType / LiquidacionType):
+ *   - TipoAfiliacion: 1 (Afiliada) | 2 (No afiliada)
+ *   - Liquidacion:    1 (Provisional) | 2 (Final)
+ *
+ * The weight fields (PesoNetoKilogramo, PesoNetoMineria) are plain ≥0 decimals
+ * covered by the generic format checks, so they are not re-validated here.
+ */
+function checkMineriaItem(
+  item: Element,
+  lineaNum: number,
+  invoiceType: InvoiceType,
+  lines: XmlLine[]
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+  if (!['E-32', 'E-33', 'E-34', 'E-46'].includes(invoiceType)) return issues
+
+  const mineria = item.querySelector(':scope > Mineria')
+  if (!mineria) return issues
+
+  const baseLine = findItemLine(lineaNum, lines)
+
+  const afiliacion = mineria.querySelector(':scope > TipoAfiliacion')?.textContent?.trim()
+  if (afiliacion && !['1', '2'].includes(afiliacion)) {
+    issues.push({
+      id: nextId(),
+      severity: 'red',
+      field: 'TipoAfiliacion',
+      line: baseLine,
+      message: `Ítem ${lineaNum}: TipoAfiliacion="${afiliacion}" es inválido. Valores válidos: 1 (Afiliada), 2 (No afiliada).`,
+    })
+  }
+
+  const liquidacion = mineria.querySelector(':scope > Liquidacion')?.textContent?.trim()
+  if (liquidacion && !['1', '2'].includes(liquidacion)) {
+    issues.push({
+      id: nextId(),
+      severity: 'red',
+      field: 'Liquidacion',
+      line: baseLine,
+      message: `Ítem ${lineaNum}: Liquidacion="${liquidacion}" es inválido. Valores válidos: 1 (Provisional), 2 (Final).`,
+    })
+  }
+
+  return issues
+}
+
 // ── MontoItem math check ──────────────────────────────────────────────────────
 
 /**
@@ -954,6 +1008,7 @@ export function runItemChecks(
     issues.push(...checkItemRequiredFields(item, lineaNum, lines))
     issues.push(...checkIndicadorFacturacion(item, lineaNum, invoiceType, lines))
     issues.push(...checkIndicadorBienoServicio(item, lineaNum, invoiceType, lines))
+    issues.push(...checkMineriaItem(item, lineaNum, invoiceType, lines))
     issues.push(...checkRetencionPerItem(item, lineaNum, invoiceType, lines))
     issues.push(...checkTipoDescuentoRecargo(item, lineaNum, lines))
     issues.push(...checkISCProductFields(item, lineaNum, invoiceType, lines, fechaEmision))

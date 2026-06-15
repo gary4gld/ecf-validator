@@ -176,11 +176,26 @@ const RFCE_EMISOR_SEQUENCE: string[] = [
 
 /**
  * Comprador field sequences — varies by type.
- * E-32/33/34 add IdentificadorExtranjero after RNCComprador.
- * E-41 has a shorter set.
+ * E-32/33/34/44 add IdentificadorExtranjero after RNCComprador (verified against
+ * their XSDs); E-46 additionally has PaisComprador + export/port fields; E-31/45
+ * have neither; E-41 and E-47 use shorter sets.
  */
+
+// Shared by E-32/33/34/44: identical to the E-31 full sequence with
+// IdentificadorExtranjero inserted at position 2 (after RNCComprador).
+// Verified against the Comprador complexType in e-CF_32/33/34/44_v_1_0.xsd.
+const COMPRADOR_WITH_IDEXT: string[] = [
+  'RNCComprador', 'IdentificadorExtranjero', 'RazonSocialComprador',
+  'ContactoComprador', 'CorreoComprador', 'DireccionComprador',
+  'MunicipioComprador', 'ProvinciaComprador',
+  'FechaEntrega', 'ContactoEntrega', 'DireccionEntrega', 'TelefonoAdicional',
+  'FechaOrdenCompra', 'NumeroOrdenCompra', 'CodigoInternoComprador',
+  'ResponsablePago', 'InformacionAdicionalComprador', 'InformacionesAdicionales',
+  'FechaEmbarque', 'NumeroEmbarque', 'NumeroContenedor',
+]
+
 const COMPRADOR_SEQUENCES: Partial<Record<InvoiceType, string[]>> = {
-  // Full comprador (E-31, E-33, E-44, E-45)
+  // E-31 full Comprador sequence (also used by E-45 via COMPRADOR_FULL_TYPES)
   'E-31': [
     'RNCComprador', 'RazonSocialComprador', 'ContactoComprador', 'CorreoComprador',
     'DireccionComprador', 'MunicipioComprador', 'ProvinciaComprador',
@@ -189,13 +204,14 @@ const COMPRADOR_SEQUENCES: Partial<Record<InvoiceType, string[]>> = {
     'ResponsablePago', 'InformacionAdicionalComprador', 'InformacionesAdicionales',
     'FechaEmbarque', 'NumeroEmbarque', 'NumeroContenedor',
   ],
-  // E-32 Comprador adds IdentificadorExtranjero after RNCComprador
-  'E-32': [
-    'RNCComprador', 'IdentificadorExtranjero', 'RazonSocialComprador',
-    'ContactoComprador', 'CorreoComprador', 'DireccionComprador',
-    'MunicipioComprador', 'ProvinciaComprador',
-    'FechaEntrega', 'ContactoEntrega', 'DireccionEntrega', 'TelefonoAdicional',
-  ],
+  // E-32/33/34/44 share the same Comprador sequence — see COMPRADOR_WITH_IDEXT.
+  // (Previously E-32 was truncated at 12 fields and E-33/34/44 fell through to the
+  // E-31 sequence, which lacks IdentificadorExtranjero — a misplaced
+  // IdentificadorExtranjero in those types went undetected. Fixed.)
+  'E-32': COMPRADOR_WITH_IDEXT,
+  'E-33': COMPRADOR_WITH_IDEXT,
+  'E-34': COMPRADOR_WITH_IDEXT,
+  'E-44': COMPRADOR_WITH_IDEXT,
   // E-41 Comprador — shorter set, no delivery/order fields
   'E-41': [
     'RNCComprador', 'RazonSocialComprador', 'ContactoComprador', 'CorreoComprador',
@@ -220,12 +236,16 @@ const COMPRADOR_SEQUENCES: Partial<Record<InvoiceType, string[]>> = {
   ],
 }
 
-// Types that share the E-31 full Comprador sequence (E-46 now has its own entry above)
-const COMPRADOR_FULL_TYPES: InvoiceType[] = ['E-33', 'E-34', 'E-44', 'E-45']
+// Types that share the E-31 full Comprador sequence (no IdentificadorExtranjero).
+// Only E-45 qualifies: its 16-field XSD Comprador sequence is identical to E-31's.
+// E-33/E-34/E-44 were moved out (their XSDs include IdentificadorExtranjero, so
+// they now use COMPRADOR_WITH_IDEXT above); E-46 has its own distinct entry.
+const COMPRADOR_FULL_TYPES: InvoiceType[] = ['E-45']
 
 /**
- * Totales field sequence — same for all ECF types that have it.
- * ImpuestosAdicionales is the container table for selective consumption taxes.
+ * Totales field sequence — used by every ECF type that has ITBIS
+ * (E-31/32/33/34/41/44/45/46). ImpuestosAdicionales is the container table for
+ * selective consumption taxes. E-47 uses TOTALES_SEQUENCE_E47 instead.
  */
 const TOTALES_SEQUENCE: string[] = [
   'MontoGravadoTotal', 'MontoGravadoI1', 'MontoGravadoI2', 'MontoGravadoI3',
@@ -237,6 +257,23 @@ const TOTALES_SEQUENCE: string[] = [
   'SaldoAnterior', 'MontoAvancePago', 'ValorPagar',
   'TotalITBISRetenido', 'TotalISRRetencion',
   'TotalITBISPercepcion', 'TotalISRPercepcion',
+]
+
+/**
+ * E-47 (Pagos al Exterior) Totales — reduced field set. Payments abroad carry no
+ * Dominican ITBIS, so none of the MontoGravado, ITBIS, or ImpuestosAdicionales
+ * fields exist; the schema allows only these seven, in this order. Verified against
+ * e-CF_47_v_1_0.xsd:84-96. (OtraMoneda is a sibling of Totales in Encabezado,
+ * not a child, so it is not part of this sequence.)
+ *
+ * Note: E-47's fields are an in-order subset of TOTALES_SEQUENCE, so this does not
+ * change which orderings are flagged today — it documents the real structure and
+ * isolates E-47 from future edits to the ITBIS-bearing sequence above.
+ */
+const TOTALES_SEQUENCE_E47: string[] = [
+  'MontoExento', 'MontoTotal', 'MontoPeriodo',
+  'SaldoAnterior', 'MontoAvancePago', 'ValorPagar',
+  'TotalISRRetencion',
 ]
 
 /**
@@ -340,7 +377,7 @@ function checkOrder(
  *   - CantidadReferencia/UnidadReferencia/TablaSubcantidad/GradosAlcohol:
  *     present in E-31/32/33/34/45 — absent in E-41/43/44/46/47
  *   - FechaElaboracion/FechaVencimientoItem: present in E-31/32/33/34/41/44/45/46
- *   - Mineria: present in E-31/32/33/34/46
+ *   - Mineria: present in E-32/33/34/46 (NOT E-31)
  *   - DescuentoMonto/TablaSubDescuento/RecargoMonto/TablaSubRecargo:
  *     absent in E-43 (code 0) and E-47 (no discounts in schema)
  *   - OtraMonedaDetalle: before MontoItem when present (all types)
@@ -354,7 +391,7 @@ const ITEM_SEQUENCE: string[] = [
   'NumeroLinea',
   'TablaCodigosItem',
   'IndicadorFacturacion',
-  'Retencion',               // MUST be before NombreItem (all types that have it)
+  'Retencion',               // E-31/33/34/41/47 — MUST be before NombreItem
   'NombreItem',
   'IndicadorBienoServicio',
   'DescripcionItem',
@@ -367,13 +404,14 @@ const ITEM_SEQUENCE: string[] = [
   'PrecioUnitarioReferencia',// E-31/32/33/34/45 only
   'FechaElaboracion',        // E-31/32/33/34/41/44/45/46
   'FechaVencimientoItem',    // E-31/32/33/34/41/44/45/46
-  'Mineria',                 // E-31/32/33/34/46 only
+  'Mineria',                 // E-32/33/34/46 only
   'PrecioUnitarioItem',
   'DescuentoMonto',          // absent in E-43, E-47
   'TablaSubDescuento',       // absent in E-43, E-47
   'RecargoMonto',            // absent in E-43, E-47
   'TablaSubRecargo',         // absent in E-43, E-47
-  'OtraMonedaDetalle',       // present in some types when billing in foreign currency
+  'TablaImpuestoAdicional',  // E-31/32/33/34/44/45 (forbidden item-level in E-41/43/46/47)
+  'OtraMonedaDetalle',       // all types (foreign-currency billing)
   'MontoItem',
 ]
 
@@ -490,7 +528,8 @@ function checkTotalesOrder(
   const totales = findSection(doc, 'Totales')
   if (!totales) return []
   const actual = directChildren(totales)
-  return checkOrder('Totales', actual, TOTALES_SEQUENCE, lines)
+  const expected = invoiceType === 'E-47' ? TOTALES_SEQUENCE_E47 : TOTALES_SEQUENCE
+  return checkOrder('Totales', actual, expected, lines)
 }
 
 function checkInformacionReferenciaOrder(

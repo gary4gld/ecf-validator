@@ -523,15 +523,49 @@ export function checkForbiddenFields(
     })
   }
 
-  // IdentificadorExtranjero is forbidden (obligation code 0) in E-31, E-41, E-45.
-  // Source: PDF obligation table field 39.
-  const ieForbiddenTypes = new Set<InvoiceType>(['E-31', 'E-41', 'E-45'])
-  if (ieForbiddenTypes.has(invoiceType) && /<IdentificadorExtranjero>/.test(xml)) {
+  // Mineria (item-level section) exists only in E-32, E-33, E-34, E-46, where it is
+  // conditional (code 2 — "a que exista facturación relacionada al sector minería";
+  // Formato e-CF PDF p.40). It is forbidden (code 0) in E-31, E-41, E-43, E-44, E-45
+  // and E-47 — <Mineria> is absent from those XSDs, so its presence causes a DGII
+  // rejection with "element is not expected". The four child fields
+  // (PesoNetoKilogramo, PesoNetoMineria, TipoAfiliacion, Liquidacion) only ever
+  // appear nested inside <Mineria>, so flagging the wrapper covers them.
+  const mineriaForbiddenTypes = new Set<InvoiceType>([
+    'E-31', 'E-41', 'E-43', 'E-44', 'E-45', 'E-47',
+  ])
+  if (mineriaForbiddenTypes.has(invoiceType) && /<Mineria>/.test(xml)) {
+    issues.push({
+      id: nextId(), severity: 'red',
+      field: 'Mineria',
+      line: findLine(/<Mineria>/, lines),
+      message: `La sección <Mineria> no aplica para ${invoiceType} (código de obligatoriedad 0 — no existe en su esquema XSD). Solo E-32, E-33, E-34 y E-46 admiten esta sección, condicional a facturación del sector minería. Su presencia causará rechazo por DGII con el error "element is not expected".`,
+    })
+  }
+
+  // IdentificadorExtranjero is forbidden (obligation code 0) in the four types that
+  // never carry it: E-31, E-41, E-45 (they have a Comprador with RNCComprador but no
+  // IdentificadorExtranjero element) and E-43 (no Comprador section at all). Verified
+  // against each XSD's Comprador complexType. Source: PDF obligation table field 39.
+  //
+  // For E-43 the <Comprador> wrapper, if present, is already flagged above as a whole
+  // forbidden section, so suppress this per-field message when that fired to avoid
+  // double-reporting the same root cause. It still fires for a stray
+  // <IdentificadorExtranjero> in E-43 that has no <Comprador> wrapper.
+  const ieForbiddenTypes = new Set<InvoiceType>(['E-31', 'E-41', 'E-43', 'E-45'])
+  const compradorWrapperFlagged = invoiceType === 'E-43' && /<Comprador>/.test(xml)
+  if (
+    ieForbiddenTypes.has(invoiceType) &&
+    /<IdentificadorExtranjero>/.test(xml) &&
+    !compradorWrapperFlagged
+  ) {
+    const reason = invoiceType === 'E-43'
+      ? 'Los comprobantes de gastos menores no identifican al comprador — no existe sección Comprador en el esquema.'
+      : 'El comprador en este tipo de e-CF debe identificarse con RNCComprador (RNC o Cédula dominicana).'
     issues.push({
       id: nextId(), severity: 'red',
       field: 'IdentificadorExtranjero',
       line: findLine(/<IdentificadorExtranjero>/, lines),
-      message: `IdentificadorExtranjero no aplica para ${invoiceType}. El comprador en este tipo de e-CF debe identificarse con RNCComprador (RNC o Cédula dominicana). Su presencia causará rechazo por DGII.`,
+      message: `IdentificadorExtranjero no aplica para ${invoiceType}. ${reason} Su presencia causará rechazo por DGII.`,
     })
   }
 
@@ -638,6 +672,38 @@ export function checkForbiddenFields(
   }
 
   return issues
+}
+
+// ── ViaTransporte enum (E-46 only) ────────────────────────────────────────────
+
+/**
+ * ViaTransporte (E-46 Transporte section) must be one of the ViaTransporteType
+ * codes: 01 (Terrestre), 02 (Marítimo), 03 (Aérea) — zero-padded strings.
+ * Only E-46 legally carries ViaTransporte; its presence in any other type is
+ * already flagged by the e46OnlyFields loop in checkForbiddenFields, so this
+ * value check is scoped to E-46 to avoid double-reporting. Source: XSD
+ * ViaTransporteType (e-CF_46_v_1_0.xsd).
+ */
+export function checkViaTransporteValue(
+  xml: string,
+  invoiceType: InvoiceType,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  if (invoiceType !== 'E-46') return null
+
+  const via = getValue('ViaTransporte', xml)
+  if (!via) return null
+
+  if (!['01', '02', '03'].includes(via.trim())) {
+    return {
+      id: nextId(),
+      severity: 'red',
+      field: 'ViaTransporte',
+      line: findLine(/<ViaTransporte>/, lines),
+      message: `ViaTransporte="${via}" es inválido. Valores válidos (ViaTransporteType): 01 (Terrestre), 02 (Marítimo), 03 (Aérea). Deben incluir el cero inicial.`,
+    }
+  }
+  return null
 }
 
 // ── E-33 CodigoModificacion must be 3 ────────────────────────────────────────

@@ -56,6 +56,7 @@ import {
   checkVersion,
   checkFechaHoraFirma,
   checkForbiddenFields,
+  checkViaTransporteValue,
   checkIndicadorNotaCreditoDate,
   checkFechaHoraFirmaConsistency,
   checkNCFModificadoPrefix,
@@ -217,6 +218,7 @@ function runCrossFieldChecks(parsed: ParsedXml): ValidationIssue[] {
   push(checkE32RfceRequirement(xml, invoiceType, lines))
   push(checkRfceCodigoNote(xml, invoiceType, lines))
   pushAll(checkForbiddenFields(xml, invoiceType, lines))
+  push(checkViaTransporteValue(xml, invoiceType, lines))
   push(checkIndicadorNotaCreditoDate(xml, invoiceType, lines))
   push(checkFechaHoraFirmaConsistency(xml, lines))
   push(checkNCFModificadoPrefix(xml, invoiceType, lines))
