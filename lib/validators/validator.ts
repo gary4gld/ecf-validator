@@ -74,6 +74,7 @@ import {
   checkOtraMonedaTotals,
   checkTotalCif,
   checkHeaderImpuestosAdicionales,
+  checkOtraMonedaImpuestosAdicionales,
 } from './math-checks'
 import {
   resetSeqCounter,
@@ -275,6 +276,7 @@ function runMathChecks(parsed: ParsedXml): ValidationIssue[] {
     pushAll(checkTotalCif(xml, lines))
   }
   pushAll(checkHeaderImpuestosAdicionales(xml, lines))
+  pushAll(checkOtraMonedaImpuestosAdicionales(xml, lines))
 
   return issues
 }

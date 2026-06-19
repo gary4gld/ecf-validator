@@ -376,6 +376,89 @@ export function checkHeaderImpuestosAdicionales(
   return issues
 }
 
+// ── Check 5b: ImpuestosAdicionalesOtraMoneda (FX mirror of Check 5) ───────────
+
+/**
+ * Foreign-currency mirror of checkHeaderImpuestosAdicionales. When the header
+ * <ImpuestosAdicionalesOtraMoneda> section is present, validates each
+ * <ImpuestoAdicionalOtraMoneda> entry exactly as the DOP check does:
+ *   a) TipoImpuestoOtraMoneda enum: must be 001–039
+ *   b) TasaImpuestoAdicionalOtraMoneda for ISC alcohol codes 006–022: validated
+ *      against the quarterly DDG-AR1 rate via validateTasaISC.
+ *
+ * The ISC rate is a percentage fixed by resolution — identical regardless of the
+ * invoice currency — so validateTasaISC applies unchanged. Like the DOP check,
+ * no sum reconciliation is done here (that lives in checkOtraMonedaTotals, which
+ * already folds MontoImpuestoAdicionalOtraMoneda into the MontoTotalOtraMoneda
+ * formula). Section/entry tag names are distinct from the DOP ones, so the two
+ * checks never cross-match.
+ */
+export function checkOtraMonedaImpuestosAdicionales(
+  xml:   string,
+  lines: XmlLine[]
+): ValidationIssue[] {
+  const headerMatch = xml.match(/<ImpuestosAdicionalesOtraMoneda>([\s\S]*?)<\/ImpuestosAdicionalesOtraMoneda>/)
+  if (!headerMatch) return []
+
+  const issues: ValidationIssue[] = []
+  const headerSection = headerMatch[1]
+  const fechaEmision = (xml.match(/<FechaEmision>([^<]+)<\/FechaEmision>/) ?? [])[1]?.trim() ?? ''
+
+  const blocks = headerSection.match(/<ImpuestoAdicionalOtraMoneda>[\s\S]*?<\/ImpuestoAdicionalOtraMoneda>/g) ?? []
+
+  for (const block of blocks) {
+    const tipoMatch = block.match(/<TipoImpuestoOtraMoneda>([^<]+)<\/TipoImpuestoOtraMoneda>/)
+    if (!tipoMatch) continue
+
+    const tipo = tipoMatch[1].trim()
+
+    // a) TipoImpuestoOtraMoneda enum: must be 001–039
+    if (!VALID_ISC_CODES.has(tipo)) {
+      issues.push({
+        id: nextId(), severity: 'red',
+        field: 'TipoImpuestoOtraMoneda',
+        line: findLine(/<TipoImpuestoOtraMoneda>/, lines),
+        message: `TipoImpuestoOtraMoneda "${tipo}" en la sección ImpuestosAdicionalesOtraMoneda es inválido. Los valores aceptados son 001–039 según la Tabla I del Formato eCF.`,
+      })
+      continue
+    }
+
+    // b) TasaImpuestoAdicionalOtraMoneda rate check for ISC alcohol codes 006–022
+    const tasaMatch = block.match(/<TasaImpuestoAdicionalOtraMoneda>([^<]+)<\/TasaImpuestoAdicionalOtraMoneda>/)
+    if (!tasaMatch || !ISC_ALCOHOL_CODES.has(tipo)) continue
+
+    const tasaDeclared = parseFloat(tasaMatch[1].trim())
+    if (isNaN(tasaDeclared)) continue
+
+    const result = validateTasaISC(tipo, tasaDeclared, fechaEmision)
+
+    if (result.status === 'mismatch') {
+      issues.push({
+        id: nextId(), severity: 'orange',
+        field: 'TasaImpuestoAdicionalOtraMoneda',
+        line: findLine(/<TasaImpuestoAdicionalOtraMoneda>/, lines),
+        message: `TasaImpuestoAdicionalOtraMoneda (${fmt(tasaDeclared)}) para TipoImpuesto ${tipo} no coincide con la tasa vigente según ${result.resolution}: se esperan ${fmt(result.expected)} RD$/L. La tasa ISC es la misma sin importar la moneda; varía trimestralmente (resoluciones DDG-AR1, dgii.gov.do/legislacion/resoluciones/).`,
+      })
+    } else if (result.status === 'unconfirmed') {
+      issues.push({
+        id: nextId(), severity: 'blue',
+        field: 'TasaImpuestoAdicionalOtraMoneda',
+        line: findLine(/<TasaImpuestoAdicionalOtraMoneda>/, lines),
+        message: `TasaImpuestoAdicionalOtraMoneda: la tasa ISC para el período ${result.key} (${result.resolution}) no está confirmada en nuestra tabla. Verifica contra la resolución DDG-AR1 vigente en dgii.gov.do/legislacion/resoluciones/.`,
+      })
+    } else if (result.status === 'period_unknown') {
+      issues.push({
+        id: nextId(), severity: 'blue',
+        field: 'TasaImpuestoAdicionalOtraMoneda',
+        line: findLine(/<TasaImpuestoAdicionalOtraMoneda>/, lines),
+        message: `TasaImpuestoAdicionalOtraMoneda: no se encontró tasa ISC para el período derivado de la FechaEmision. Verifica la resolución DDG-AR1 correspondiente en dgii.gov.do/legislacion/resoluciones/.`,
+      })
+    }
+  }
+
+  return issues
+}
+
 // ── Check 6: OtraMoneda section totals ────────────────────────────────────────
 
 /**
