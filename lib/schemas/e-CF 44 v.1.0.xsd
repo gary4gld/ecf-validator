@@ -556,6 +556,7 @@
       <xs:enumeration value="VEF"/> <!-- BOLIVAR FUERTE VENEZOLANO -->
       <xs:enumeration value="HTG"/> <!-- GURDA HAITIANA -->
       <xs:enumeration value="MXN"/> <!-- PESO MEXICANO -->
+      <xs:enumeration value="COP"/> <!-- PESO COLOMBIANO -->
     </xs:restriction>
   </xs:simpleType>
 
