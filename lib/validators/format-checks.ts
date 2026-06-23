@@ -550,8 +550,9 @@ export function validateIndicadorNotaCredito(xml: string, lines: XmlLine[]): Val
 // ── TipoMoneda: Tabla II Codificación Monedas ──────────────────────────────────
 
 /**
- * TipoMoneda must be one of the 16 codes from Tabla II (Codificación Monedas).
- * Source: XSD TipoMonedaType (confirmed identical across all 10 invoice types).
+ * TipoMoneda must be one of the 17 codes from Tabla II (Codificación Monedas).
+ * Source: XSD TipoMonedaType. COP (Peso Colombiano) is present in the current
+ * e-CF XSDs across all invoice types; RFCE (E-32-R) does not carry this enum.
  * PDF field 120, validation rule a): "Validar con la Tabla II (Codificación Monedas)".
  */
 const TIPO_MONEDA_CODES = new Set([
@@ -571,6 +572,7 @@ const TIPO_MONEDA_CODES = new Set([
   'VEF', // Bolívar Fuerte Venezolano
   'HTG', // Gourde Haitiana
   'MXN', // Peso Mexicano
+  'COP', // Peso Colombiano (present in TipoMonedaType of all current e-CF XSDs)
 ])
 
 export function validateTipoMoneda(

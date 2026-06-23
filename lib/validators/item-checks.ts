@@ -974,6 +974,165 @@ function checkOtraMonedaDetalle(
  * Run all item-level checks.
  * Returns empty array if DOMParser is unavailable or XML is unparseable.
  */
+// ── Σ(MontoItemOtraMoneda) vs MontoTotalOtraMoneda (header) ───────────────────
+
+/**
+ * Foreign-currency analog of checkItemSumVsHeader. When the header <OtraMoneda>
+ * section is present, the sum of per-item MontoItemOtraMoneda must tie to the
+ * header MontoTotalOtraMoneda — with the SAME IndicadorMontoGravado handling as
+ * the DOP check, because MontoItemOtraMoneda carries ITBIS exactly when MontoItem
+ * does (it is the foreign-currency equivalent of the line total).
+ *
+ *   MontoTotalOtraMoneda = Σ(base MontoItemOtraMoneda) + TotalITBISOtraMoneda
+ *                          + MontoImpuestoAdicionalOtraMoneda
+ *
+ * where base is pre-ITBIS: toBase() divides MontoItemOtraMoneda by (1+rate/100)
+ * only when IndicadorMontoGravado=1 (ITBIS rates are percentages — currency-
+ * agnostic), and returns it unchanged when =0. This mirrors the invariant that
+ * MontoTotalOtraMoneda always includes TotalITBISOtraMoneda regardless of mode.
+ *
+ * Skipped when a global <DescuentosORecargos> section is present: it carries
+ * MontoDescuentooRecargoOtraMoneda, which shifts MontoTotalOtraMoneda by an
+ * amount the aggregate item sum can't reconstruct. The per-item cross-rate check
+ * (checkOtraMonedaDetalle) still runs in that case. Also skipped if any billable
+ * item is missing MontoItemOtraMoneda (incomplete coverage → would false-positive;
+ * the missing field is reported by the conditional/required-field layers instead).
+ */
+function checkOtraMonedaItemSumVsHeader(
+  items: Element[],
+  raw: string,
+  lines: XmlLine[]
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+
+  if (!/<OtraMoneda>/.test(raw)) return issues
+  if (/<DescuentosORecargos>/.test(raw)) return issues
+
+  function getHeaderNum(field: string): number | null {
+    const m = raw.match(new RegExp(`<${field}[^>]*>([^<]+)</${field}>`))
+    if (!m) return null
+    const n = parseFloat(m[1].trim())
+    return isNaN(n) ? null : n
+  }
+
+  const headerTotalOM = getHeaderNum('MontoTotalOtraMoneda')
+  if (headerTotalOM === null) return issues
+
+  const indicadorGravado = parseInt(
+    raw.match(/<IndicadorMontoGravado>([^<]+)<\/IndicadorMontoGravado>/)?.[1]?.trim() ?? '0'
+  )
+
+  function getHeaderRate(field: string, fallback: number): number {
+    const v = parseFloat(raw.match(new RegExp(`<${field}>([^<]+)</${field}>`))?.[1]?.trim() ?? '')
+    return isNaN(v) ? fallback : v
+  }
+  const rateByIF: Record<number, number> = {
+    1: getHeaderRate('ITBIS1', 18),
+    2: getHeaderRate('ITBIS2', 16),
+    3: getHeaderRate('ITBIS3', 0),
+    4: 0,
+    0: 0,
+  }
+
+  const buckets: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 }
+  for (const item of items) {
+    const indicador = parseInt(childText(item, 'IndicadorFacturacion') ?? '', 10)
+    if (!(indicador in buckets)) continue // IF=0 / missing → not part of the sum
+    const omStr = item
+      .querySelector(':scope > OtraMonedaDetalle > MontoItemOtraMoneda')
+      ?.textContent?.trim()
+    if (!omStr) return issues // incomplete OtraMoneda coverage → skip aggregate check
+    const om = parseFloat(omStr)
+    if (isNaN(om)) return issues
+    buckets[indicador] += om
+  }
+
+  function toBase(ifCode: number, sum: number): number {
+    if (indicadorGravado === 1 && rateByIF[ifCode] > 0) {
+      return sum / (1 + rateByIF[ifCode] / 100)
+    }
+    return sum
+  }
+
+  const sumBillable = Math.round(
+    (toBase(1, buckets[1]) + toBase(2, buckets[2]) + toBase(3, buckets[3]) + buckets[4]) * 100
+  ) / 100
+
+  const totalITBISOM = Math.round((getHeaderNum('TotalITBISOtraMoneda') ?? 0) * 100) / 100
+  const impAdicOM    = Math.round((getHeaderNum('MontoImpuestoAdicionalOtraMoneda') ?? 0) * 100) / 100
+  const adjustedTotal = Math.round((sumBillable + totalITBISOM + impAdicOM) * 100) / 100
+
+  const TOLS = 0.05
+  if (Math.abs(headerTotalOM - adjustedTotal) > TOLS) {
+    const baseNote  = indicadorGravado === 1 ? ' (base pre-ITBIS)' : ''
+    const itbisNote = totalITBISOM > 0 ? ` + TotalITBISOtraMoneda (${totalITBISOM.toFixed(2)})` : ''
+    const impNote   = impAdicOM > 0 ? ` + MontoImpuestoAdicionalOtraMoneda (${impAdicOM.toFixed(2)})` : ''
+    issues.push({
+      id: nextId(), severity: 'orange',
+      field: 'MontoTotalOtraMoneda',
+      line: findLine(/<MontoTotalOtraMoneda>/, lines),
+      message: `MontoTotalOtraMoneda (${headerTotalOM.toFixed(2)}) no coincide con la suma de MontoItemOtraMoneda${baseNote}${itbisNote}${impNote}: ${adjustedTotal.toFixed(2)}. Diferencia: ${Math.abs(headerTotalOM - adjustedTotal).toFixed(2)}.`,
+    })
+  }
+
+  return issues
+}
+
+// ── PrecioOtraMoneda × Cantidad − Desc + Rec ≈ MontoItemOtraMoneda ────────────
+
+/**
+ * Within-foreign-currency item arithmetic — the OtraMoneda analog of
+ * checkMontoItem. When an item has <OtraMonedaDetalle>:
+ *
+ *   MontoItemOtraMoneda = CantidadItem × PrecioOtraMoneda
+ *                         − DescuentoOtraMoneda + RecargoOtraMoneda
+ *
+ * All terms are in the foreign currency, so no TipoCambio is involved, and no
+ * IndicadorMontoGravado handling (line arithmetic is mode-independent, exactly
+ * as in checkMontoItem). This is distinct from checkOtraMonedaDetalle, which
+ * cross-checks MontoItemOtraMoneda × TipoCambio ≈ MontoItem — the two catch
+ * different errors (a wrong unit price vs. a wrong exchange conversion).
+ * DescuentoOtraMoneda/RecargoOtraMoneda are optional (absent → 0).
+ */
+function checkOtraMonedaItemMath(
+  item: Element,
+  lineaNum: number,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  const detalle = item.querySelector(':scope > OtraMonedaDetalle')
+  if (!detalle) return null
+
+  const precioStr   = detalle.querySelector(':scope > PrecioOtraMoneda')?.textContent?.trim()
+  const montoStr    = detalle.querySelector(':scope > MontoItemOtraMoneda')?.textContent?.trim()
+  const cantidadStr = childText(item, 'CantidadItem')
+  if (!precioStr || !montoStr || !cantidadStr) return null
+
+  const precio   = parseFloat(precioStr)
+  const monto    = parseFloat(montoStr)
+  const cantidad = parseFloat(cantidadStr)
+  if (isNaN(precio) || isNaN(monto) || isNaN(cantidad)) return null
+
+  const descuento = parseFloat(detalle.querySelector(':scope > DescuentoOtraMoneda')?.textContent?.trim() ?? '') || 0
+  const recargo   = parseFloat(detalle.querySelector(':scope > RecargoOtraMoneda')?.textContent?.trim() ?? '') || 0
+
+  const expected = Math.round((cantidad * precio - descuento + recargo) * 100) / 100
+  const diff = Math.abs(monto - expected)
+
+  if (diff > ITEM_MATH_TOLERANCE) {
+    const adj = descuento > 0 || recargo > 0
+      ? ` − descuento ${descuento.toFixed(2)} + recargo ${recargo.toFixed(2)}`
+      : ''
+    return {
+      id: nextId(),
+      severity: 'orange',
+      field: 'MontoItemOtraMoneda',
+      line: findItemLine(lineaNum, lines),
+      message: `Ítem ${lineaNum}: MontoItemOtraMoneda (${monto.toFixed(2)}) no coincide con CantidadItem × PrecioOtraMoneda${adj}: ${cantidad} × ${precio}${adj} = ${expected.toFixed(2)}. Diferencia: ${diff.toFixed(2)}.`,
+    }
+  }
+  return null
+}
+
 export function runItemChecks(
   raw: string,
   invoiceType: InvoiceType,
@@ -1032,6 +1191,9 @@ export function runItemChecks(
 
     const otraMonedaIssue = checkOtraMonedaDetalle(item, lineaNum, lines, tipoCambio)
     if (otraMonedaIssue) issues.push(otraMonedaIssue)
+
+    const otraMonedaMathIssue = checkOtraMonedaItemMath(item, lineaNum, lines)
+    if (otraMonedaMathIssue) issues.push(otraMonedaMathIssue)
   }
 
   // 3. Retention totals vs sum of per-item MontoITBISRetenido/MontoISRRetenido
@@ -1039,6 +1201,7 @@ export function runItemChecks(
 
   // 4. Sum of items vs header totals (document-level)
   issues.push(...checkItemSumVsHeader(items, raw, lines))
+  issues.push(...checkOtraMonedaItemSumVsHeader(items, raw, lines))
 
   return issues
 }

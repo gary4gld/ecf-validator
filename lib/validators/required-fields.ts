@@ -7,10 +7,12 @@
  *
  * Key findings from full XSD analysis:
  *  - TipoIngresos is ABSENT in E-41, E-43, E-47 (not required, not optional — not in schema)
+ *  - TipoIngresos is OPTIONAL (minOccurs=0) in E-33 and E-34 since the 01/04/2026
+ *    e-CF 33/34 XSD update; still required (minOccurs=1) in E-31/32/44/45/46
  *  - TipoPago is optional (minOccurs=0) in E-41, E-43, E-47
  *  - FechaVencimientoSecuencia is absent in E-32 and E-34
  *  - E-33 requires FechaVencimientoSecuencia; E-34 does NOT
- *  - E-34 has a unique required field: IndicadorNotaCredito
+ *  - E-34 has a unique required field: IndicadorNotaCredito (values 0/1)
  *  - E-41 requires RNCComprador + RazonSocialComprador; E-47 does NOT
  *  - E-41 and E-47 both require a Retencion block per item
  *  - E-47 Retencion is stricter: MontoISRRetenido is also required
@@ -91,19 +93,29 @@ const SHARED_ECF: FieldRequirement[] = [
   },
 ]
 
-/** TipoIngresos + TipoPago — required for E-31/32/33/34/44/45/46. Absent in E-41/43/47. */
+/** TipoPago — required for E-31/32/33/34/44/45/46. Optional in E-41/43/47. */
 const WITH_TIPO_PAGO: FieldRequirement[] = [
-  {
-    field: 'TipoIngresos',
-    pattern: /<TipoIngresos>/,
-    severity: 'red',
-    message: 'TipoIngresos es obligatorio. Valores válidos: 01–06 (con cero incluido).',
-  },
   {
     field: 'TipoPago',
     pattern: /<TipoPago>/,
     severity: 'red',
     message: 'TipoPago es obligatorio. Valores válidos: 1 (contado), 2 (crédito), 3 (gratuito).',
+  },
+]
+
+/**
+ * TipoIngresos — required (minOccurs=1) for E-31/32/44/45/46 (and RFCE, handled
+ * separately). NOT required for E-33/E-34: the DGII 01/04/2026 e-CF 33/34 XSD
+ * update made TipoIngresos optional (minOccurs 1→0) for debit/credit notes.
+ * The Oct-2025 Formato still lists it as obligatorio for these types, but the
+ * newer XSD wins. Absent from the schema entirely in E-41/43/47.
+ */
+const WITH_TIPO_INGRESOS: FieldRequirement[] = [
+  {
+    field: 'TipoIngresos',
+    pattern: /<TipoIngresos>/,
+    severity: 'red',
+    message: 'TipoIngresos es obligatorio. Valores válidos: 01–06 (con cero incluido).',
   },
 ]
 
@@ -289,18 +301,20 @@ const RFCE_REQUIRED: FieldRequirement[] = [
 export function getRequirements(invoiceType: InvoiceType): FieldRequirement[] {
   switch (invoiceType) {
     case 'E-31':
-      return [...SHARED_ECF, ...WITH_TIPO_PAGO, ...WITH_FECHA_VENCIMIENTO, ...WITH_COMPRADOR_REQUIRED]
+      return [...SHARED_ECF, ...WITH_TIPO_INGRESOS, ...WITH_TIPO_PAGO, ...WITH_FECHA_VENCIMIENTO, ...WITH_COMPRADOR_REQUIRED]
 
     case 'E-32':
       // No FechaVencimientoSecuencia, no RNCComprador required
-      return [...SHARED_ECF, ...WITH_TIPO_PAGO]
+      return [...SHARED_ECF, ...WITH_TIPO_INGRESOS, ...WITH_TIPO_PAGO]
 
     case 'E-33':
-      // Requires FechaVencimientoSecuencia (like E-31), Comprador is optional
+      // Requires FechaVencimientoSecuencia (like E-31), Comprador optional.
+      // TipoIngresos NOT required (optional per Apr-2026 XSD) — omit WITH_TIPO_INGRESOS.
       return [...SHARED_ECF, ...WITH_TIPO_PAGO, ...WITH_FECHA_VENCIMIENTO, ...WITH_INFORMACION_REFERENCIA]
 
     case 'E-34':
-      // No FechaVencimientoSecuencia, has unique IndicadorNotaCredito
+      // No FechaVencimientoSecuencia, has unique IndicadorNotaCredito.
+      // TipoIngresos NOT required (optional per Apr-2026 XSD) — omit WITH_TIPO_INGRESOS.
       return [...SHARED_ECF, ...WITH_TIPO_PAGO, ...WITH_INDICADOR_NOTA_CREDITO, ...WITH_INFORMACION_REFERENCIA]
 
     case 'E-41':
@@ -313,15 +327,15 @@ export function getRequirements(invoiceType: InvoiceType): FieldRequirement[] {
 
     case 'E-44':
       // RazonSocialComprador required, RNCComprador optional
-      return [...SHARED_ECF, ...WITH_TIPO_PAGO, ...WITH_FECHA_VENCIMIENTO, ...WITH_RAZON_SOCIAL_COMPRADOR]
+      return [...SHARED_ECF, ...WITH_TIPO_INGRESOS, ...WITH_TIPO_PAGO, ...WITH_FECHA_VENCIMIENTO, ...WITH_RAZON_SOCIAL_COMPRADOR]
 
     case 'E-45':
       // Both RNCComprador and RazonSocialComprador required
-      return [...SHARED_ECF, ...WITH_TIPO_PAGO, ...WITH_FECHA_VENCIMIENTO, ...WITH_COMPRADOR_REQUIRED]
+      return [...SHARED_ECF, ...WITH_TIPO_INGRESOS, ...WITH_TIPO_PAGO, ...WITH_FECHA_VENCIMIENTO, ...WITH_COMPRADOR_REQUIRED]
 
     case 'E-46':
       // RazonSocialComprador required, RNCComprador optional
-      return [...SHARED_ECF, ...WITH_TIPO_PAGO, ...WITH_FECHA_VENCIMIENTO, ...WITH_RAZON_SOCIAL_COMPRADOR]
+      return [...SHARED_ECF, ...WITH_TIPO_INGRESOS, ...WITH_TIPO_PAGO, ...WITH_FECHA_VENCIMIENTO, ...WITH_RAZON_SOCIAL_COMPRADOR]
 
     case 'E-47':
       // No TipoIngresos, TipoPago optional, Comprador optional, stricter Retencion
