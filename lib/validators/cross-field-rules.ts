@@ -398,6 +398,83 @@ export function checkFechaHoraFirmaConsistency(
   return null
 }
 
+// ── FechaHoraFirma ≤ hora actual (Formato sección G, validación b) ────────────
+
+/** Below this, a future offset is treated as ordinary clock jitter → silent. */
+const FIRMA_SKEW_SILENT_MS = 60_000          // 1 minute
+/** Between SILENT and this, likely local clock skew → yellow rather than red. */
+const FIRMA_SKEW_YELLOW_MS = 5 * 60_000      // 5 minutes
+
+/**
+ * DGII rule — Formato eCF, sección G, validación b:
+ *   "Valida que fecha y hora firma del e-CF =< fecha y hora actual."
+ *
+ * FechaHoraFirma is declared in GMT-4 ("Zona horaria GMT -4", sección G). The
+ * Dominican Republic does not observe DST, so the offset is -4 year-round.
+ *
+ * The timestamp is parsed as GMT-4 wall time and converted to a UTC instant
+ * before comparing with Date.now(). We deliberately do NOT build a local Date:
+ * that would silently use the validator's own timezone and give wrong answers
+ * for anyone not sitting in GMT-4.
+ *
+ * Severity is tiered so ordinary clock drift doesn't produce a false red:
+ *   ≤ 1 min ahead   → silent
+ *   1–5 min ahead   → yellow (probably local clock skew, but worth checking)
+ *   > 5 min ahead   → red (DGII rejects)
+ *
+ * A ~4 hour gap gets a targeted message: that is the fingerprint of an emitter
+ * writing UTC into a field DGII reads as GMT-4 — the most common cause by far.
+ */
+export function checkFechaHoraFirmaFutura(
+  xml: string,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  const raw = getValue('FechaHoraFirma', xml)
+  if (!raw) return null
+
+  // Single-digit H/m/s are tolerated here because the XSD pattern allows them;
+  // the zero-padding requirement is reported separately by format-checks.
+  const m = raw.match(/^(\d{1,2})-(\d{1,2})-(\d{4})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})$/)
+  if (!m) return null   // malformed → format-checks already reports it
+
+  // +4h converts the GMT-4 wall time into the corresponding UTC instant.
+  const firmaUtcMs = Date.UTC(
+    parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]),
+    parseInt(m[4]) + 4, parseInt(m[5]), parseInt(m[6])
+  )
+
+  const aheadMs = firmaUtcMs - Date.now()
+  if (aheadMs <= FIRMA_SKEW_SILENT_MS) return null
+
+  const line     = findLine(/<FechaHoraFirma>/, lines)
+  const aheadMin = Math.round(aheadMs / 60_000)
+
+  if (aheadMs <= FIRMA_SKEW_YELLOW_MS) {
+    return {
+      id: nextId(),
+      severity: 'yellow',
+      field: 'FechaHoraFirma',
+      line,
+      message: `FechaHoraFirma (${raw}) está ~${aheadMin} min en el futuro respecto a la hora actual en GMT-4. DGII exige que la fecha y hora de firma sea menor o igual a la hora actual. Un desfase tan pequeño suele deberse al reloj local, pero verifica la sincronización (NTP) antes de enviar.`,
+    }
+  }
+
+  const hoursAhead = aheadMs / 3_600_000
+  const magnitude  = hoursAhead >= 1 ? `${hoursAhead.toFixed(1)} h` : `${aheadMin} min`
+  const utcHint    =
+    hoursAhead >= 3.5 && hoursAhead <= 4.5
+      ? ' El desfase es de ~4 horas: es exactamente el patrón de un emisor que escribe la hora en UTC en un campo que DGII interpreta como GMT-4. Convierte la hora a GMT-4 antes de serializar el XML.'
+      : ''
+
+  return {
+    id: nextId(),
+    severity: 'red',
+    field: 'FechaHoraFirma',
+    line,
+    message: `FechaHoraFirma (${raw}) está ~${magnitude} en el futuro respecto a la hora actual en GMT-4. DGII rechazará el e-CF: la validación exige que la fecha y hora de firma sea menor o igual a la hora actual (Formato sección G, validación b).${utcHint}`,
+  }
+}
+
 // ── NCFModificado prefix validation ───────────────────────────────────────────
 
 /**

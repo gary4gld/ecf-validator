@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ECF>
+  <Encabezado>
+    <Version>1.0</Version>
+    <IdDoc>
+      <TipoeCF>31</TipoeCF>
+      <eNCF>E310000000001</eNCF>
+    </IdDoc>
+    <Emisor>
+      <RNCEmisor>131880681</RNCEmisor>
+      <RazonSocialEmisor>EMPRESA DEMO SRL</RazonSocialEmisor>
+      <FechaEmision>15-06-2026</FechaEmision>
+    </Emisor>
+    <Comprador>
+      <RNCComprador>101023126</RNCComprador>
+      <RazonSocialComprador>CLIENTE DEMO SRL</RazonSocialComprador>
+    </Comprador>
+    <Totales>
+      <MontoTotal>1180.00</MontoTotal>
+    </Totales>
+  </Encabezado>
+  <DetallesItems>
+    <Item>
+      <NumeroLinea>1</NumeroLinea>
+      <IndicadorFacturacion>1</IndicadorFacturacion>
+      <NombreItem>Servicio demo</NombreItem>
+      <CantidadItem>1</CantidadItem>
+      <PrecioUnitarioItem>1000.00</PrecioUnitarioItem>
+      <MontoItem>1000.00</MontoItem>
+    </Item>
+  </DetallesItems>
+</ECF>

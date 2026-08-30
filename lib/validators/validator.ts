@@ -59,6 +59,7 @@ import {
   checkViaTransporteValue,
   checkIndicadorNotaCreditoDate,
   checkFechaHoraFirmaConsistency,
+  checkFechaHoraFirmaFutura,
   checkNCFModificadoPrefix,
   checkFechaVencimientoSecuencia,
   checkFechaDesdeHasta,
@@ -222,6 +223,7 @@ function runCrossFieldChecks(parsed: ParsedXml): ValidationIssue[] {
   push(checkViaTransporteValue(xml, invoiceType, lines))
   push(checkIndicadorNotaCreditoDate(xml, invoiceType, lines))
   push(checkFechaHoraFirmaConsistency(xml, lines))
+  push(checkFechaHoraFirmaFutura(xml, lines))
   push(checkNCFModificadoPrefix(xml, invoiceType, lines))
   push(checkFechaVencimientoSecuencia(xml, lines))
   push(checkFechaDesdeHasta(xml, lines))
