@@ -28,8 +28,14 @@
  * item parsing and is tracked in VALIDATION_LIMITATIONS.md.
  */
 
-import type { ValidationIssue, XmlLine } from '../types'
-import { validateTasaISC, ISC_ALCOHOL_CODES, VALID_ISC_CODES } from './isc-rates'
+import type { ValidationIssue, XmlLine, InvoiceType } from '../types'
+import {
+  validateTasaISC,
+  ISC_ALCOHOL_CODES,
+  VALID_ISC_CODES,
+  ISC_PRODUCT_CODES,
+  ISC_FORBIDDEN_TYPES,
+} from './isc-rates'
 
 // ── Internals ─────────────────────────────────────────────────────────────────
 
@@ -310,13 +316,28 @@ export function resetMathCounter(): void {
  */
 export function checkHeaderImpuestosAdicionales(
   xml:   string,
-  lines: XmlLine[]
+  lines: XmlLine[],
+  invoiceType: InvoiceType
 ): ValidationIssue[] {
   // Only proceed if the header ImpuestosAdicionales section exists
   const headerMatch = xml.match(/<ImpuestosAdicionales>([\s\S]*?)<\/ImpuestosAdicionales>/)
   if (!headerMatch) return []
 
   const issues: ValidationIssue[] = []
+
+  // Section-level prohibition: E-41/43/46/47 have obligation 0 for ImpuestosAdicionales —
+  // the section is absent from their XSDs, so its presence is a hard schema violation.
+  // Report once at the section level and stop (no point validating entries in a section
+  // that shouldn't exist).
+  if (ISC_FORBIDDEN_TYPES.has(invoiceType)) {
+    return [{
+      id: nextId(), severity: 'red',
+      field: 'ImpuestosAdicionales',
+      line: findLine(/<ImpuestosAdicionales>/, lines),
+      message: `La sección ImpuestosAdicionales (Totales) no está permitida en ${invoiceType}: este tipo de e-CF tiene obligación 0 para impuestos adicionales y el esquema XSD no la define. DGII rechazará el documento con "element is not expected".`,
+    }]
+  }
+
   const headerSection  = headerMatch[1]
   const fechaEmision = (xml.match(/<FechaEmision>([^<]+)<\/FechaEmision>/) ?? [])[1]?.trim() ?? ''
 
@@ -338,6 +359,40 @@ export function checkHeaderImpuestosAdicionales(
         message: `TipoImpuesto "${tipo}" en la sección ImpuestosAdicionales (Totales) es inválido. Los valores aceptados son 001–039 según la Tabla I del Formato eCF.`,
       })
       continue
+    }
+
+    // a.2) E-44 (Regímenes Especiales): only codes 001–005 apply (footnote 18/19). The
+    // product ISC codes 006–039 (específico + ad valorem) are forbidden — mirrors the
+    // item-level restriction in item-checks.ts.
+    if (invoiceType === 'E-44' && ISC_PRODUCT_CODES.has(tipo)) {
+      issues.push({
+        id: nextId(), severity: 'red',
+        field: 'TipoImpuesto',
+        line: findLine(/<TipoImpuesto>/, lines),
+        message: `TipoImpuesto "${tipo}" (código ISC de producto 006–039) no aplica para E-44 (Regímenes Especiales) en la sección ImpuestosAdicionales. E-44 solo admite códigos 001–005 (Otros Impuestos Adicionales). Ver nota 18/19 del Formato eCF.`,
+      })
+    }
+
+    // a.3) E-44: the ISC-específico / ad-valorem MONTO fields (107/108) are obligation 0.
+    // In an E-44 the only valid additional-tax amount is OtrosImpuestosAdicionales, so
+    // MontoImpuestoAdicional can only ever equal OtrosImpuestosAdicionales.
+    if (invoiceType === 'E-44') {
+      if (/<MontoImpuestoSelectivoConsumoEspecifico>/.test(block)) {
+        issues.push({
+          id: nextId(), severity: 'red',
+          field: 'MontoImpuestoSelectivoConsumoEspecifico',
+          line: findLine(/<MontoImpuestoSelectivoConsumoEspecifico>/, lines),
+          message: `MontoImpuestoSelectivoConsumoEspecifico no aplica para E-44 (obligación 0, campo 107): E-44 no puede declarar ISC específico de producto. El único monto de impuesto adicional válido es OtrosImpuestosAdicionales.`,
+        })
+      }
+      if (/<MontoImpuestoSelectivoConsumoAdvalorem>/.test(block)) {
+        issues.push({
+          id: nextId(), severity: 'red',
+          field: 'MontoImpuestoSelectivoConsumoAdvalorem',
+          line: findLine(/<MontoImpuestoSelectivoConsumoAdvalorem>/, lines),
+          message: `MontoImpuestoSelectivoConsumoAdvalorem no aplica para E-44 (obligación 0, campo 108): E-44 no puede declarar ISC ad valorem de producto. El único monto de impuesto adicional válido es OtrosImpuestosAdicionales.`,
+        })
+      }
     }
 
     // b) TasaImpuestoAdicional rate check for ISC alcohol codes 006–022

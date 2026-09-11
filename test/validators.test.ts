@@ -67,6 +67,28 @@ describe('FechaHoraFirma ≤ ahora — Formato sección G, validación b', () =>
   })
 })
 
+describe('ISC header gaps — Totales > ImpuestosAdicionales type-awareness', () => {
+  it('accepts E-44 with a services-ISC code (004 Telecom, in 001–005)', () => {
+    const issues = validateXml(loadFixture('e44-isc-004-valido.xml'))
+    expect(hasIssue(issues, { field: 'TipoImpuesto', severity: 'red' })).toBe(false)
+  })
+
+  it('rejects E-44 with a product-ISC code (014 Ron, in 006–039)', () => {
+    const issues = validateXml(loadFixture('e44-isc-014-prohibido.xml'))
+    expect(hasIssue(issues, { field: 'TipoImpuesto', severity: 'red', message: 'E-44' })).toBe(true)
+  })
+
+  it('rejects E-44 carrying MontoImpuestoSelectivoConsumoEspecifico (campo 107, obligación 0)', () => {
+    const issues = validateXml(loadFixture('e44-isc-especifico-prohibido.xml'))
+    expect(hasIssue(issues, { field: 'MontoImpuestoSelectivoConsumoEspecifico', severity: 'red' })).toBe(true)
+  })
+
+  it('rejects the whole ImpuestosAdicionales section in E-46 (obligation 0)', () => {
+    const issues = validateXml(loadFixture('e46-isc-prohibido.xml'))
+    expect(hasIssue(issues, { field: 'ImpuestosAdicionales', severity: 'red', message: 'no está permitida' })).toBe(true)
+  })
+})
+
 describe('TipoIngresos requiredness — guards the E-33/E-34 optional split (Apr-2026 XSD)', () => {
   it('does NOT flag E-34 missing TipoIngresos (now optional)', () => {
     const issues = validateXml(loadFixture('e34-sin-tipoingresos.xml'))

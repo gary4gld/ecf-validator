@@ -51,6 +51,8 @@ export interface ISCPeriodRates {
  * Update instructions above. Contact AlcoholesyTabacos@dgii.gov.do for
  * queries about specific periods.
  */
+import type { InvoiceType } from '../types'
+
 export const ISC_RATES_TABLE: Record<string, ISCPeriodRates> = {
   // ── 2023 ───────────────────────────────────────────────────────────────────
   '2023-Q1': { resolution: 'DDG-AR1-2022-00008', alcohol: 705.64, cig20:  59.69, cig10: 29.84 },
@@ -139,6 +141,17 @@ export const ISC_ALCOHOL_CODES = new Set<string>(
 export const VALID_ISC_CODES = new Set<string>(
   Array.from({ length: 39 }, (_, i) => String(i + 1).padStart(3, '0'))  // 001–039
 )
+
+/** ISC product codes (006–039): ISC específico + ad valorem for products (alcohol, tobacco).
+ *  These never apply to E-44 (Regímenes Especiales), which is limited to 001–005. */
+export const ISC_PRODUCT_CODES = new Set<string>(
+  Array.from({ length: 34 }, (_, i) => String(i + 6).padStart(3, '0'))  // 006–039
+)
+
+/** Types whose Impuestos Adicionales / ISC sections are obligation 0 (forbidden) — at both
+ *  item level (TablaImpuestoAdicional) and header level (Totales > ImpuestosAdicionales).
+ *  The section is simply absent from these types' XSDs. */
+export const ISC_FORBIDDEN_TYPES = new Set<InvoiceType>(['E-41', 'E-43', 'E-46', 'E-47'])
 
 export type ISCRateValidationResult =
   | { status: 'valid' }

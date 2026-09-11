@@ -277,7 +277,7 @@ function runMathChecks(parsed: ParsedXml): ValidationIssue[] {
   if (parsed.invoiceType === 'E-46') {
     pushAll(checkTotalCif(xml, lines))
   }
-  pushAll(checkHeaderImpuestosAdicionales(xml, lines))
+  pushAll(checkHeaderImpuestosAdicionales(xml, lines, parsed.invoiceType))
   pushAll(checkOtraMonedaImpuestosAdicionales(xml, lines))
 
   return issues

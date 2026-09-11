@@ -18,7 +18,7 @@
 
 import type { InvoiceType, ValidationIssue, XmlLine } from '../types'
 // ISC constants from isc-rates.ts (single source of truth)
-import { VALID_ISC_CODES } from './isc-rates'
+import { VALID_ISC_CODES, ISC_PRODUCT_CODES, ISC_FORBIDDEN_TYPES } from './isc-rates'
 // ── Internals ─────────────────────────────────────────────────────────────────
 
 let _itemCounter = 0
@@ -771,10 +771,8 @@ function checkItemSumVsHeader(
  * Note: ISC amount math validation (footnotes 24-26) requires a quarterly-updated
  * rate table from DGII. Structural checks (presence/codes) are implemented here.
  */
-const ISC_PRODUCT_CODES = new Set<string>(                      // 006-039
-  Array.from({ length: 34 }, (_, i) => String(i + 6).padStart(3, '0'))
-)
-const ISC_FORBIDDEN_TYPES = new Set<InvoiceType>(['E-41', 'E-43', 'E-46', 'E-47'])
+// ISC_PRODUCT_CODES (006–039) and ISC_FORBIDDEN_TYPES (E-41/43/46/47) are the single
+// source of truth in isc-rates.ts, shared with the header-level check in math-checks.ts.
 
 function checkISCProductFields(
   item: Element,
