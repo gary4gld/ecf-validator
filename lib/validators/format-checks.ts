@@ -479,6 +479,29 @@ export function validateTipoCuentaPago(xml: string, lines: XmlLine[]): Validatio
 }
 
 /**
+ * NumeroCuentaPago format advisory.
+ *
+ * The XSD type (NumeroCuentaPagoType) is a plain string with minLength 1 / maxLength 28
+ * and NO numeric pattern — so DGII will NOT reject non-digit characters, and this cannot
+ * be a hard (red) error. Length is already enforced via MAX_LENGTHS. But Dominican bank
+ * account numbers are numeric; hyphens or spaces here are almost always a data-entry
+ * mistake (e.g. someone pasting "131-880-681"-style formatting). Blue advisory only.
+ */
+export function validateNumeroCuentaPago(xml: string, lines: XmlLine[]): ValidationIssue | null {
+  const v = getValue('NumeroCuentaPago', xml)
+  if (v === null) return null
+  if (/^[0-9]+$/.test(v.trim())) return null   // purely numeric → fine
+
+  return {
+    id: nextId(),
+    severity: 'blue',
+    field: 'NumeroCuentaPago',
+    line: findLine(/<NumeroCuentaPago>/, lines),
+    message: `NumeroCuentaPago ("${v.trim()}") contiene caracteres no numéricos. Las cuentas bancarias dominicanas suelen ser solo dígitos; verifica que no se hayan incluido guiones o espacios por error. Nota: el esquema XSD lo permite (cadena de 1–28 caracteres), así que DGII no lo rechazará por este motivo.`,
+  }
+}
+
+/**
  * TipoAjuste must be D (Descuento) or R (Recargo).
  */
 export function validateTipoAjuste(xml: string, lines: XmlLine[]): ValidationIssue[] {

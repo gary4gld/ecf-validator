@@ -475,6 +475,61 @@ export function checkFechaHoraFirmaFutura(
   }
 }
 
+// ── FechaEmision reasonableness (VALIDATION_LIMITATIONS #22) ───────────────────
+
+/** Days a FechaEmision may sit in the past before we surface an informational note. */
+const FECHA_EMISION_OLD_DAYS = 365
+
+/**
+ * FechaEmision sanity window, evaluated against "today" in GMT-4 (DR has no DST).
+ * The XSD only checks the DD-MM-YYYY shape, so a typo'd year or an accidental future
+ * date passes schema validation. Not a schema rejection on its own, so severity is soft:
+ *   - future calendar date  → yellow (likely a typo; also conflicts with FechaHoraFirma ≤ now)
+ *   - > 1 year in the past   → blue  (verify; may be a delayed or mis-dated emission)
+ */
+export function checkFechaEmisionReasonable(
+  xml: string,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  const raw = getValue('FechaEmision', xml)
+  if (!raw) return null
+
+  const m = raw.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/)
+  if (!m) return null   // malformed → the format-layer FechaEmision check reports it
+
+  const emisionMs = Date.UTC(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]))
+
+  // "Today" as a GMT-4 calendar date, pinned to UTC midnight for a clean whole-day diff.
+  const gmt4 = new Date(Date.now() - 4 * 3_600_000)
+  const todayMs = Date.UTC(gmt4.getUTCFullYear(), gmt4.getUTCMonth(), gmt4.getUTCDate())
+
+  const line = findLine(/<FechaEmision>/, lines)
+  const dayDiff = Math.round((emisionMs - todayMs) / 86_400_000)
+
+  if (dayDiff > 0) {
+    return {
+      id: nextId(),
+      severity: 'yellow',
+      field: 'FechaEmision',
+      line,
+      message: `FechaEmision (${raw}) es una fecha futura respecto a hoy en GMT-4. Un e-CF normalmente no se emite con fecha futura; verifica que día, mes y año sean correctos. (Si el documento se firma, FechaHoraFirma también debe ser ≤ la hora actual.)`,
+    }
+  }
+
+  if (-dayDiff > FECHA_EMISION_OLD_DAYS) {
+    const years = ((-dayDiff) / 365).toFixed(1)
+    return {
+      id: nextId(),
+      severity: 'blue',
+      field: 'FechaEmision',
+      line,
+      message: `FechaEmision (${raw}) es de hace ~${years} año(s). Verifica que la fecha sea intencional y que el e-CF aún esté dentro del plazo de envío a DGII.`,
+    }
+  }
+
+  return null
+}
+
 // ── NCFModificado prefix validation ───────────────────────────────────────────
 
 /**

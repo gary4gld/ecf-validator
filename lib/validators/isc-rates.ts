@@ -75,6 +75,7 @@ export const ISC_RATES_TABLE: Record<string, ISCPeriodRates> = {
   // ── 2026 ───────────────────────────────────────────────────────────────────
   '2026-Q1': { resolution: 'DDG-AR1-2025-00008', alcohol:   null, cig20:  63.87, cig10: 31.94 }, // alcohol: fetch DDG-AR1-2025-00008 PDF
   '2026-Q2': { resolution: 'DDG-AR1-2026-00002', alcohol: 758.26, cig20:  64.14, cig10: 32.07 },
+  '2026-Q3': { resolution: 'DDG-AR1-2026-00004', alcohol: 764.29, cig20:  64.65, cig10: 32.33 }, // amounts: DGII ISC page (jul–sep 2026); VERIFY resolution number from PDF
 }
 
 // ── Period resolution ──────────────────────────────────────────────────────

@@ -38,6 +38,7 @@ import {
   validateIndicadorMontoGravado,
   validateIndicadorEnvioDiferido,
   validateTipoCuentaPago,
+  validateNumeroCuentaPago,
   validateTipoAjuste,
   validateCodigoModificacion,
   validateFormaPagoValues,
@@ -60,6 +61,7 @@ import {
   checkIndicadorNotaCreditoDate,
   checkFechaHoraFirmaConsistency,
   checkFechaHoraFirmaFutura,
+  checkFechaEmisionReasonable,
   checkNCFModificadoPrefix,
   checkFechaVencimientoSecuencia,
   checkFechaDesdeHasta,
@@ -191,6 +193,7 @@ function runFormatChecks(parsed: ParsedXml): ValidationIssue[] {
   push(validateIndicadorMontoGravado(xml, lines))
   push(validateIndicadorEnvioDiferido(xml, lines))
   push(validateTipoCuentaPago(xml, lines))
+  push(validateNumeroCuentaPago(xml, lines))
   pushAll(validateTipoAjuste(xml, lines))
   push(validateCodigoModificacion(xml, lines))
   pushAll(validateFormaPagoValues(xml, lines))
@@ -224,6 +227,7 @@ function runCrossFieldChecks(parsed: ParsedXml): ValidationIssue[] {
   push(checkIndicadorNotaCreditoDate(xml, invoiceType, lines))
   push(checkFechaHoraFirmaConsistency(xml, lines))
   push(checkFechaHoraFirmaFutura(xml, lines))
+  push(checkFechaEmisionReasonable(xml, lines))
   push(checkNCFModificadoPrefix(xml, invoiceType, lines))
   push(checkFechaVencimientoSecuencia(xml, lines))
   push(checkFechaDesdeHasta(xml, lines))

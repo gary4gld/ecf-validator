@@ -89,6 +89,37 @@ describe('ISC header gaps — Totales > ImpuestosAdicionales type-awareness', ()
   })
 })
 
+describe('NumeroCuentaPago format advisory (XSD permits any string 1–28)', () => {
+  it('does not flag a purely numeric account number', () => {
+    const issues = validateXml(loadFixture('e31-cuenta-numerica.xml'))
+    expect(hasIssue(issues, { field: 'NumeroCuentaPago' })).toBe(false)
+  })
+
+  it('raises a blue advisory when the account number contains hyphens', () => {
+    const issues = validateXml(loadFixture('e31-cuenta-guiones.xml'))
+    expect(hasIssue(issues, { field: 'NumeroCuentaPago', severity: 'blue' })).toBe(true)
+    // it is advisory only — never red (the schema allows non-digits)
+    expect(hasIssue(issues, { field: 'NumeroCuentaPago', severity: 'red' })).toBe(false)
+  })
+})
+
+describe('FechaEmision reasonableness (VALIDATION_LIMITATIONS #22)', () => {
+  it('does not flag a recent FechaEmision', () => {
+    const issues = validateXml(loadFixture('e31-cuenta-numerica.xml'))
+    expect(hasIssue(issues, { field: 'FechaEmision', message: 'futura' })).toBe(false)
+  })
+
+  it('flags a future FechaEmision (yellow)', () => {
+    const issues = validateXml(loadFixture('e31-fecha-futura.xml'))
+    expect(hasIssue(issues, { field: 'FechaEmision', severity: 'yellow', message: 'futura' })).toBe(true)
+  })
+
+  it('notes a FechaEmision more than a year in the past (blue)', () => {
+    const issues = validateXml(loadFixture('e31-fecha-vieja.xml'))
+    expect(hasIssue(issues, { field: 'FechaEmision', severity: 'blue' })).toBe(true)
+  })
+})
+
 describe('TipoIngresos requiredness — guards the E-33/E-34 optional split (Apr-2026 XSD)', () => {
   it('does NOT flag E-34 missing TipoIngresos (now optional)', () => {
     const issues = validateXml(loadFixture('e34-sin-tipoingresos.xml'))
