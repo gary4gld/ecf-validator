@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { validateXml, hasIssue, loadFixture } from './helpers'
+import { isValidRNC } from '@/lib/validators/format-checks'
 
 /**
  * Regression suite for the ECF validator.
@@ -9,6 +10,42 @@ import { validateXml, hasIssue, loadFixture } from './helpers'
  * total issue count — so a fixture only needs to exercise its rule, it does not
  * have to be a globally valid invoice.
  */
+
+describe('RNC / cédula checksum (isValidRNC) — VALIDATION_LIMITATIONS #25', () => {
+  it('accepts a valid 9-digit RNC (known-good checksum)', () => {
+    expect(isValidRNC('131880681')).toBe(true)
+  })
+  it('rejects a 9-digit RNC with a broken checksum', () => {
+    expect(isValidRNC('131880682')).toBe(false)
+  })
+  it('accepts a Luhn-valid 11-digit cédula', () => {
+    expect(isValidRNC('00102030400')).toBe(true)
+  })
+  it('rejects an 11-digit cédula with a broken Luhn check digit', () => {
+    expect(isValidRNC('00102030401')).toBe(false)
+  })
+})
+
+describe('RFCE forbidden fields (E-32-R has no items/signature/etc.)', () => {
+  it('flags a DetallesItems section inside an RFCE (red)', () => {
+    const issues = validateXml(loadFixture('rfce-detallesitems-prohibido.xml'))
+    expect(hasIssue(issues, { field: 'DetallesItems', severity: 'red' })).toBe(true)
+  })
+})
+
+describe('TablaSubcantidad — Subcantidad ≤ CantidadItem (#19)', () => {
+  it('flags a Subcantidad greater than CantidadItem (yellow)', () => {
+    const issues = validateXml(loadFixture('e31-subcantidad-excede.xml'))
+    expect(hasIssue(issues, { field: 'Subcantidad', severity: 'yellow' })).toBe(true)
+  })
+})
+
+describe('E-33/E-34 stale reference note (#24)', () => {
+  it('notes a FechaNCFModificado more than a year before FechaEmision (blue)', () => {
+    const issues = validateXml(loadFixture('e34-referencia-antigua.xml'))
+    expect(hasIssue(issues, { field: 'FechaNCFModificado', severity: 'blue' })).toBe(true)
+  })
+})
 
 describe('IndicadorNotaCredito enum (E-34) — guards the {0,1} vs {1,2} regression', () => {
   // If someone ever flips the enum back to {1,2}, BOTH of these go red:

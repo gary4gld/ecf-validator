@@ -530,6 +530,47 @@ export function checkFechaEmisionReasonable(
   return null
 }
 
+// ── E-33/E-34 stale reference note (VALIDATION_LIMITATIONS #24) ────────────────
+
+/** Gap between the referenced document's date and this note's emission that triggers a note. */
+const REFERENCIA_ANTIGUA_DAYS = 365
+
+/**
+ * Informational: when an E-33/E-34 references a document (FechaNCFModificado) issued
+ * far in the past relative to FechaEmision, surface a blue note. Not a rejection — just
+ * a prompt to confirm the CodigoModificacion and that the right document is referenced.
+ */
+export function checkFechaReferenciaAntigua(
+  xml: string,
+  invoiceType: InvoiceType,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  if (invoiceType !== 'E-33' && invoiceType !== 'E-34') return null
+
+  const refRaw = getValue('FechaNCFModificado', xml)
+  const emiRaw = getValue('FechaEmision', xml)
+  if (!refRaw || !emiRaw) return null
+
+  const parse = (s: string): number | null => {
+    const m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/)
+    return m ? Date.UTC(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1])) : null
+  }
+  const refMs = parse(refRaw), emiMs = parse(emiRaw)
+  if (refMs === null || emiMs === null) return null
+
+  const dayGap = Math.round((emiMs - refMs) / 86_400_000)
+  if (dayGap <= REFERENCIA_ANTIGUA_DAYS) return null
+
+  const years = (dayGap / 365).toFixed(1)
+  return {
+    id: nextId(),
+    severity: 'blue',
+    field: 'FechaNCFModificado',
+    line: findLine(/<FechaNCFModificado>/, lines),
+    message: `El documento referenciado (FechaNCFModificado ${refRaw}) es de hace ~${years} año(s) respecto a FechaEmision (${emiRaw}). Verifica que se esté modificando el comprobante correcto y que el CodigoModificacion sea el apropiado.`,
+  }
+}
+
 // ── NCFModificado prefix validation ───────────────────────────────────────────
 
 /**
@@ -585,6 +626,28 @@ export function checkForbiddenFields(
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = []
   const push = (issue: ValidationIssue | null) => { if (issue) issues.push(issue) }
+
+  // RFCE (E-32-R) is a summary document: many e-CF sections/elements simply do not
+  // exist in its schema. Any of these present → DGII "element is not expected".
+  if (invoiceType === 'E-32-R') {
+    const RFCE_FORBIDDEN = [
+      'DetallesItems', 'FechaHoraFirma', 'OtraMoneda', 'InformacionReferencia',
+      'FechaVencimientoSecuencia', 'Transporte', 'Mineria', 'DescuentosORecargos',
+      'Paginacion', 'TotalPaginas',
+    ]
+    for (const field of RFCE_FORBIDDEN) {
+      if (new RegExp(`<${field}[\\s>]`).test(xml)) {
+        push({
+          id: nextId(),
+          severity: 'red',
+          field,
+          line: findLine(new RegExp(`<${field}[\\s>]`), lines),
+          message: `${field} no forma parte del esquema RFCE (E-32-R). El RFCE es un resumen y no incluye esta sección; su presencia causará rechazo por DGII ("element is not expected").`,
+        })
+      }
+    }
+    return issues   // RFCE has none of the e-CF-type-specific forbidden fields below
+  }
 
   // E-32 and E-34: FechaVencimientoSecuencia is not defined in their schemas
   if (

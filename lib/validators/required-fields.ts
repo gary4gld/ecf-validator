@@ -241,6 +241,12 @@ const WITH_RETENCION_ISR_REQUIRED: FieldRequirement[] = [
 
 const RFCE_REQUIRED: FieldRequirement[] = [
   {
+    field: 'Version',
+    pattern: /<Version>/,
+    severity: 'red',
+    message: 'Version es obligatoria en el RFCE (minOccurs=1 en el XSD).',
+  },
+  {
     field: 'TipoeCF',
     pattern: /<TipoeCF>/,
     severity: 'red',
@@ -293,6 +299,12 @@ const RFCE_REQUIRED: FieldRequirement[] = [
     pattern: /<CodigoSeguridadeCF>/,
     severity: 'red',
     message: 'CodigoSeguridadeCF es obligatorio y exclusivo del RFCE. Deben ser los primeros 6 caracteres de la firma digital de la factura de consumo original.',
+  },
+  {
+    field: 'Comprador',
+    pattern: /<Comprador>/,
+    severity: 'red',
+    message: 'La sección Comprador es obligatoria en el RFCE (minOccurs=1 en el XSD). Sus campos internos (RNCComprador, RazonSocialComprador, IdentificadorExtranjero) son opcionales, pero el contenedor <Comprador> debe estar presente.',
   },
 ]
 

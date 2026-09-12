@@ -1008,6 +1008,43 @@ function checkOtraMonedaPrecioUnitario(
   return null
 }
 
+/**
+ * TablaSubcantidad sanity (VALIDATION_LIMITATIONS #19). TablaSubcantidad is an item-level
+ * sub-table (up to 5 SubcantidadItem) used for multi-unit package breakdowns. Each Subcantidad
+ * is a portion of the line's CantidadItem, so no single Subcantidad should exceed CantidadItem.
+ * Not a schema rule (the XSD only bounds it as a non-negative decimal), so this is a soft
+ * yellow. CodigoSubcantidad (unit code) is already validated in validateUnidadMedida.
+ */
+function checkTablaSubcantidad(
+  item:     Element,
+  lineaNum: number,
+  lines:    XmlLine[]
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+
+  const tabla = item.querySelector(':scope > TablaSubcantidad')
+  if (!tabla) return issues
+
+  const cantStr  = item.querySelector(':scope > CantidadItem')?.textContent?.trim()
+  const cantidad = cantStr ? parseFloat(cantStr) : NaN
+  if (isNaN(cantidad)) return issues
+
+  const subs = tabla.querySelectorAll('SubcantidadItem > Subcantidad')
+  subs.forEach((el) => {
+    const v = parseFloat(el.textContent?.trim() ?? '')
+    if (!isNaN(v) && v > cantidad + 0.001) {
+      issues.push({
+        id: nextId(), severity: 'yellow',
+        field: 'Subcantidad',
+        line: findItemLine(lineaNum, lines),
+        message: `Ítem ${lineaNum}: una Subcantidad (${v}) es mayor que CantidadItem (${cantidad}). Las subcantidades son un desglose de la cantidad de la línea; cada una debe ser ≤ CantidadItem.`,
+      })
+    }
+  })
+
+  return issues
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
@@ -1210,6 +1247,7 @@ export function runItemChecks(
     issues.push(...checkMineriaItem(item, lineaNum, invoiceType, lines))
     issues.push(...checkRetencionPerItem(item, lineaNum, invoiceType, lines))
     issues.push(...checkTipoDescuentoRecargo(item, lineaNum, lines))
+    issues.push(...checkTablaSubcantidad(item, lineaNum, lines))
     issues.push(...checkISCProductFields(item, lineaNum, invoiceType, lines, fechaEmision))
 
     // Per-item NombreItem max-length (validateMaxLengths only checks first occurrence)
