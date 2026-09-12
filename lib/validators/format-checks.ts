@@ -502,6 +502,26 @@ export function validateNumeroCuentaPago(xml: string, lines: XmlLine[]): Validat
 }
 
 /**
+ * DocumentoTransporte must be numeric. Its XSD type Integer20ValidationType has
+ * pattern [0-9]{1,20} (base xs:integer, totalDigits 20) — so, unlike NumeroCuentaPago
+ * (a permissive string), a non-digit value here IS a schema violation and DGII rejects
+ * it. Red. This one check covers both the numeric-format rule and the 20-digit ceiling.
+ */
+export function validateDocumentoTransporte(xml: string, lines: XmlLine[]): ValidationIssue | null {
+  const v = getValue('DocumentoTransporte', xml)
+  if (v === null) return null
+  if (/^[0-9]{1,20}$/.test(v.trim())) return null
+
+  return {
+    id: nextId(),
+    severity: 'red',
+    field: 'DocumentoTransporte',
+    line: findLine(/<DocumentoTransporte>/, lines),
+    message: `DocumentoTransporte ("${v.trim()}") debe ser numérico: solo dígitos, máximo 20. El esquema XSD lo define como entero (Integer20ValidationType); guiones, espacios o letras causan rechazo de DGII.`,
+  }
+}
+
+/**
  * TipoAjuste must be D (Descuento) or R (Recargo).
  */
 export function validateTipoAjuste(xml: string, lines: XmlLine[]): ValidationIssue[] {

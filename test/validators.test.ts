@@ -120,6 +120,30 @@ describe('FechaEmision reasonableness (VALIDATION_LIMITATIONS #22)', () => {
   })
 })
 
+describe('DocumentoTransporte numeric-only (Integer20 XSD type)', () => {
+  it('accepts a purely numeric DocumentoTransporte', () => {
+    const issues = validateXml(loadFixture('e31-doctransporte-numerico.xml'))
+    expect(hasIssue(issues, { field: 'DocumentoTransporte' })).toBe(false)
+  })
+
+  it('rejects a non-numeric DocumentoTransporte (red)', () => {
+    const issues = validateXml(loadFixture('e31-doctransporte-invalido.xml'))
+    expect(hasIssue(issues, { field: 'DocumentoTransporte', severity: 'red' })).toBe(true)
+  })
+})
+
+describe('PrecioOtraMoneda unit-price cross-rate', () => {
+  it('accepts a consistent PrecioOtraMoneda (× TipoCambio ≈ PrecioUnitarioItem)', () => {
+    const issues = validateXml(loadFixture('e31-preciootramoneda-ok.xml'))
+    expect(hasIssue(issues, { field: 'PrecioOtraMoneda' })).toBe(false)
+  })
+
+  it('flags a PrecioOtraMoneda that does not convert to PrecioUnitarioItem (orange)', () => {
+    const issues = validateXml(loadFixture('e31-preciootramoneda-mal.xml'))
+    expect(hasIssue(issues, { field: 'PrecioOtraMoneda', severity: 'orange' })).toBe(true)
+  })
+})
+
 describe('TipoIngresos requiredness — guards the E-33/E-34 optional split (Apr-2026 XSD)', () => {
   it('does NOT flag E-34 missing TipoIngresos (now optional)', () => {
     const issues = validateXml(loadFixture('e34-sin-tipoingresos.xml'))

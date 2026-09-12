@@ -966,6 +966,48 @@ function checkOtraMonedaDetalle(
   return null
 }
 
+/**
+ * PrecioOtraMoneda unit-price cross-rate: PrecioOtraMoneda × TipoCambio ≈ PrecioUnitarioItem.
+ * Mirrors checkOtraMonedaDetalle (which cross-checks the item TOTAL) at the unit-price level,
+ * catching a wrong per-unit price in the foreign-currency detail even when the total happens
+ * to reconcile. Orange; tolerance max(0.50, 1% of PrecioOtraMoneda) to absorb TipoCambio's
+ * 4-decimal rounding.
+ */
+function checkOtraMonedaPrecioUnitario(
+  item:      Element,
+  lineaNum:  number,
+  lines:     XmlLine[],
+  tipoCambio: number | null
+): ValidationIssue | null {
+  if (!tipoCambio || tipoCambio <= 0) return null
+
+  const detalle = item.querySelector(':scope > OtraMonedaDetalle')
+  if (!detalle) return null
+
+  const precioOMStr  = detalle.querySelector('PrecioOtraMoneda')?.textContent?.trim()
+  const precioDOPStr = item.querySelector(':scope > PrecioUnitarioItem')?.textContent?.trim()
+
+  if (!precioOMStr || !precioDOPStr) return null
+
+  const precioOM  = parseFloat(precioOMStr)
+  const precioDOP = parseFloat(precioDOPStr)
+
+  if (isNaN(precioOM) || isNaN(precioDOP)) return null
+
+  const expected = Math.round((precioDOP / tipoCambio) * 100) / 100
+  const tol      = Math.max(0.50, Math.round(precioOM * 0.01 * 100) / 100)
+
+  if (Math.abs(precioOM - expected) > tol) {
+    return {
+      id: nextId(), severity: 'orange',
+      field: 'PrecioOtraMoneda',
+      line: findItemLine(lineaNum, lines),
+      message: `Ítem ${lineaNum}: PrecioOtraMoneda (${precioOM.toFixed(2)}) no coincide con PrecioUnitarioItem (${precioDOP.toFixed(2)}) ÷ TipoCambio (${tipoCambio}): ${expected.toFixed(2)}. Diferencia: ${Math.abs(precioOM - expected).toFixed(2)}.`,
+    }
+  }
+  return null
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
@@ -1192,6 +1234,9 @@ export function runItemChecks(
 
     const otraMonedaMathIssue = checkOtraMonedaItemMath(item, lineaNum, lines)
     if (otraMonedaMathIssue) issues.push(otraMonedaMathIssue)
+
+    const otraMonedaPrecioIssue = checkOtraMonedaPrecioUnitario(item, lineaNum, lines, tipoCambio)
+    if (otraMonedaPrecioIssue) issues.push(otraMonedaPrecioIssue)
   }
 
   // 3. Retention totals vs sum of per-item MontoITBISRetenido/MontoISRRetenido

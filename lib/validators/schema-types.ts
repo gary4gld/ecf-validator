@@ -86,6 +86,15 @@ export const MAX_LENGTHS: Record<string, number> = {
   // Misc
   BancoPago:                   75,
   NumeroCuentaPago:            28,
+
+  // Transporte (all optional → yellow on overflow). DocumentoTransporte is numeric
+  // (Integer20) and validated separately by validateDocumentoTransporte.
+  Conductor:                   20,  // AlfNum20Type
+  Ficha:                       10,  // AlfNum10Type
+  Placa:                        7,  // AlfNum7Type
+  RutaTransporte:              20,  // AlfNum20Type
+  ZonaTransporte:              20,  // AlfNum20Type
+  NumeroAlbaran:               20,  // AlfNum20Type
 }
 
 /**

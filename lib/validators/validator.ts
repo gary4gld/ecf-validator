@@ -39,6 +39,7 @@ import {
   validateIndicadorEnvioDiferido,
   validateTipoCuentaPago,
   validateNumeroCuentaPago,
+  validateDocumentoTransporte,
   validateTipoAjuste,
   validateCodigoModificacion,
   validateFormaPagoValues,
@@ -194,6 +195,7 @@ function runFormatChecks(parsed: ParsedXml): ValidationIssue[] {
   push(validateIndicadorEnvioDiferido(xml, lines))
   push(validateTipoCuentaPago(xml, lines))
   push(validateNumeroCuentaPago(xml, lines))
+  push(validateDocumentoTransporte(xml, lines))
   pushAll(validateTipoAjuste(xml, lines))
   push(validateCodigoModificacion(xml, lines))
   pushAll(validateFormaPagoValues(xml, lines))

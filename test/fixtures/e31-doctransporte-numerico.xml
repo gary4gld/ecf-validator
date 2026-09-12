@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ECF>
+  <Encabezado>
+    <Version>1.0</Version>
+    <IdDoc>
+      <TipoeCF>31</TipoeCF>
+      <eNCF>E310000000010</eNCF>
+    </IdDoc>
+    <Emisor>
+      <RNCEmisor>131880681</RNCEmisor>
+      <RazonSocialEmisor>EMPRESA DEMO SRL</RazonSocialEmisor>
+      <FechaEmision>10-09-2026</FechaEmision>
+    </Emisor>
+    <Comprador>
+      <RNCComprador>101023126</RNCComprador>
+      <RazonSocialComprador>CLIENTE DEMO SRL</RazonSocialComprador>
+    </Comprador>
+    <Totales>
+      <MontoTotal>1000.00</MontoTotal>
+    </Totales>
+  </Encabezado>
+  <Transporte>
+    <DocumentoTransporte>12345678</DocumentoTransporte>
+    <Conductor>Juan Pérez</Conductor>
+    <Placa>A123456</Placa>
+  </Transporte>
+  <DetallesItems>
+    <Item>
+      <NumeroLinea>1</NumeroLinea>
+      <NombreItem>Mercancía demo</NombreItem>
+      <CantidadItem>1</CantidadItem>
+      <PrecioUnitarioItem>1000.00</PrecioUnitarioItem>
+      <MontoItem>1000.00</MontoItem>
+    </Item>
+  </DetallesItems>
+</ECF>
