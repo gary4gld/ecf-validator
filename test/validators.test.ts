@@ -87,6 +87,21 @@ describe('ANECF (Anulación de e-NCF) — dedicated document path', () => {
     const issues = validateXml(loadFixture('anecf-tipo-mismatch.xml'))
     expect(hasIssue(issues, { field: 'SecuenciaeNCFDesde', severity: 'red' })).toBe(true)
   })
+
+  it('flags a future FechaHoraAnulacioneNCF as red', () => {
+    const issues = validateXml(loadFixture('anecf-fecha-futura.xml'))
+    expect(hasIssue(issues, { field: 'FechaHoraAnulacioneNCF', severity: 'red' })).toBe(true)
+  })
+
+  it('flags an invalid TipoeCF value as red', () => {
+    const issues = validateXml(loadFixture('anecf-tipo-invalido.xml'))
+    expect(hasIssue(issues, { field: 'TipoeCF', severity: 'red' })).toBe(true)
+  })
+
+  it('accepts a valid multi-range line (Σ ranges = declared line total)', () => {
+    const issues = validateXml(loadFixture('anecf-multirango.xml'))
+    expect(hasIssue(issues, { field: 'CantidadeNCFAnulados', severity: 'orange' })).toBe(false)
+  })
 })
 
 describe('ARECF (Acuse de Recibo) — dedicated document path', () => {

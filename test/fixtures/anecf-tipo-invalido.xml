@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ANECF>
+  <Encabezado>
+    <Version>1.0</Version>
+    <RncEmisor>131880681</RncEmisor>
+    <CantidadeNCFAnulados>5</CantidadeNCFAnulados>
+    <FechaHoraAnulacioneNCF>13-09-2026 10:00:00</FechaHoraAnulacioneNCF>
+  </Encabezado>
+  <DetalleAnulacion>
+    <Anulacion>
+      <NoLinea>1</NoLinea>
+      <TipoeCF>42</TipoeCF>
+      <TablaRangoSecuenciasAnuladaseNCF>
+        <Secuencias>
+          <SecuenciaeNCFDesde>E420000000001</SecuenciaeNCFDesde>
+          <SecuenciaeNCFHasta>E420000000005</SecuenciaeNCFHasta>
+        </Secuencias>
+      </TablaRangoSecuenciasAnuladaseNCF>
+      <CantidadeNCFAnulados>5</CantidadeNCFAnulados>
+    </Anulacion>
+  </DetalleAnulacion>
+</ANECF>
