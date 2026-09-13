@@ -22,6 +22,8 @@ let counter = 0
 const nextId = () => `acecf-${++counter}`
 export const resetAcecfCounter = () => { counter = 0 }
 
+// Local getValue uses [^<]* (not the shared [^<]+) so an empty <Field></Field> returns ""
+// rather than null — intentional, so empty required fields are flagged, not silently skipped.
 function getValue(field: string, xml: string): string | null {
   const m = xml.match(new RegExp(`<${field}[^>]*>([^<]*)</${field}>`))
   return m ? m[1].trim() : null
@@ -135,7 +137,7 @@ export function runAcecfChecks(parsed: ParsedXml): ValidationIssue[] {
       if (fEmi) {
         const em = fEmi.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/)
         if (em) {
-          const emUtc = Date.UTC(+em[3], +em[2] - 1, +em[1])
+          const emUtc = Date.UTC(+em[3], +em[2] - 1, +em[1], 4)  // GMT-4 midnight = 04:00 UTC
           // approval must be on or after the referenced e-CF's emission day
           if (aprUtc < emUtc) {
             push(red('FechaHoraAprobacionComercial',
