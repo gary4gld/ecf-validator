@@ -61,6 +61,34 @@ describe('E-41 informal-supplier advisory (RNCComprador cédula vs RNC)', () => 
   })
 })
 
+describe('ANECF (Anulación de e-NCF) — dedicated document path', () => {
+  it('a valid ANECF (Formato Anexo example) has no red or orange issues', () => {
+    const issues = validateXml(loadFixture('anecf-valido.xml'))
+    expect(hasIssue(issues, { severity: 'red' })).toBe(false)
+    expect(hasIssue(issues, { severity: 'orange' })).toBe(false)
+  })
+
+  it('flags a per-line CantidadeNCFAnulados that does not match its ranges (orange)', () => {
+    const issues = validateXml(loadFixture('anecf-cantidad-linea-mal.xml'))
+    expect(hasIssue(issues, { field: 'CantidadeNCFAnulados', severity: 'orange' })).toBe(true)
+  })
+
+  it('flags a header CantidadeNCFAnulados that does not match the line totals (orange)', () => {
+    const issues = validateXml(loadFixture('anecf-cantidad-header-mal.xml'))
+    expect(hasIssue(issues, { field: 'CantidadeNCFAnulados', severity: 'orange' })).toBe(true)
+  })
+
+  it('flags an inverted range (Hasta < Desde) as red', () => {
+    const issues = validateXml(loadFixture('anecf-rango-invertido.xml'))
+    expect(hasIssue(issues, { field: 'SecuenciaeNCFHasta', severity: 'red' })).toBe(true)
+  })
+
+  it('flags a sequence whose tipo does not match the line TipoeCF (red)', () => {
+    const issues = validateXml(loadFixture('anecf-tipo-mismatch.xml'))
+    expect(hasIssue(issues, { field: 'SecuenciaeNCFDesde', severity: 'red' })).toBe(true)
+  })
+})
+
 describe('ARECF (Acuse de Recibo) — dedicated document path', () => {
   it('a valid Estado=0 (Recibido) ARECF has no red issues', () => {
     const issues = validateXml(loadFixture('arecf-recibido.xml'))

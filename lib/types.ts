@@ -17,6 +17,7 @@ export type InvoiceType =
   | 'E-47'    // Pagos al Exterior
   | 'ACECF'   // Aprobación Comercial (receiver approve/reject)
   | 'ARECF'   // Acuse de Recibo (technical receipt acknowledgment)
+  | 'ANECF'   // Anulación de e-NCF (void authorized sequences)
   | 'unknown'
 
 export const INVOICE_TYPE_LABELS: Record<InvoiceType, string> = {
@@ -33,6 +34,7 @@ export const INVOICE_TYPE_LABELS: Record<InvoiceType, string> = {
   'E-47':    'E-47 · Pagos al Exterior',
   'ACECF':   'ACECF · Aprobación Comercial',
   'ARECF':   'ARECF · Acuse de Recibo',
+  'ANECF':   'ANECF · Anulación de e-NCF',
   'unknown': 'Tipo desconocido',
 }
 

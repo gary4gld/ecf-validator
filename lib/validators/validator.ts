@@ -1,4 +1,5 @@
 import { runArecfChecks } from './arecf-checks'
+import { runAnecfChecks } from './anecf-checks'
 import { runAcecfChecks } from './acecf-checks'
 /**
  * Main validation entry point.
@@ -321,6 +322,10 @@ export function validate(parsed: ParsedXml): ValidationIssue[] {
 
   if (invoiceType === 'ARECF') {
     return runArecfChecks(parsed)
+  }
+
+  if (invoiceType === 'ANECF') {
+    return runAnecfChecks(parsed)
   }
 
   const issues: ValidationIssue[] = [
