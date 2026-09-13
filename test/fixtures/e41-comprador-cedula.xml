@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ECF>
+  <Encabezado>
+    <Version>1.0</Version>
+    <IdDoc>
+      <TipoeCF>41</TipoeCF>
+      <eNCF>E410000000001</eNCF>
+    </IdDoc>
+    <Emisor>
+      <RNCEmisor>131880681</RNCEmisor>
+      <RazonSocialEmisor>EMPRESA DEMO SRL</RazonSocialEmisor>
+      <FechaEmision>13-09-2026</FechaEmision>
+    </Emisor>
+    <Comprador>
+      <RNCComprador>00102030400</RNCComprador>
+      <RazonSocialComprador>Proveedor Informal Demo</RazonSocialComprador>
+    </Comprador>
+    <Totales>
+      <MontoTotal>1000.00</MontoTotal>
+    </Totales>
+  </Encabezado>
+  <DetallesItems>
+    <Item>
+      <NumeroLinea>1</NumeroLinea>
+      <NombreItem>Compra de servicios informales</NombreItem>
+      <CantidadItem>1</CantidadItem>
+      <PrecioUnitarioItem>1000.00</PrecioUnitarioItem>
+      <MontoItem>1000.00</MontoItem>
+    </Item>
+  </DetallesItems>
+</ECF>

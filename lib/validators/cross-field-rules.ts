@@ -577,6 +577,36 @@ export function checkFechaReferenciaAntigua(
   }
 }
 
+// ── E-41 informal-supplier advisory (VALIDATION_LIMITATIONS #E41) ──────────────
+
+/**
+ * E-41 (Compras) documents purchases from suppliers NOT registered as contributors —
+ * normally personas físicas identified by a cédula (11 digits). A 9-digit RNC (business-
+ * shaped) is the classic error: the "supplier" is actually a registered business that
+ * should issue its own e-CF (E-31, etc.). DGII validates only the structure (9 or 11
+ * digits) and will NOT reject a 9-digit RNC, so this is a blue advisory, never an error.
+ * The real obligation — confirming the supplier is genuinely non-registered — is a manual
+ * portal check the emisor must perform and is not derivable from the XML.
+ */
+export function checkE41CompradorTipo(
+  xml: string,
+  invoiceType: InvoiceType,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  if (invoiceType !== 'E-41') return null
+
+  const v = getValue('RNCComprador', xml)
+  if (!v || !/^[0-9]{9}$/.test(v.trim())) return null   // only a clean 9-digit RNC is flagged
+
+  return {
+    id: nextId(),
+    severity: 'blue',
+    field: 'RNCComprador',
+    line: findLine(/<RNCComprador>/, lines),
+    message: `E-41 (Compras) documenta adquisiciones a proveedores informales, normalmente personas físicas identificadas por cédula (11 dígitos). RNCComprador aquí tiene 9 dígitos (formato RNC de empresa): verifica que el proveedor sea realmente un contribuyente no registrado y no una empresa que debería emitir su propio e-CF. (DGII solo valida la estructura 9/11 dígitos, no rechaza por este motivo.)`,
+  }
+}
+
 // ── NCFModificado prefix validation ───────────────────────────────────────────
 
 /**

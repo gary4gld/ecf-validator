@@ -47,6 +47,47 @@ describe('E-33/E-34 stale reference note (#24)', () => {
   })
 })
 
+describe('E-41 informal-supplier advisory (RNCComprador cédula vs RNC)', () => {
+  it('does not flag an 11-digit cédula (expected for an informal supplier)', () => {
+    const issues = validateXml(loadFixture('e41-comprador-cedula.xml'))
+    expect(hasIssue(issues, { field: 'RNCComprador', severity: 'blue' })).toBe(false)
+  })
+
+  it('raises a blue advisory for a 9-digit RNC in an E-41', () => {
+    const issues = validateXml(loadFixture('e41-comprador-rnc.xml'))
+    expect(hasIssue(issues, { field: 'RNCComprador', severity: 'blue' })).toBe(true)
+    // advisory only — never red
+    expect(hasIssue(issues, { field: 'RNCComprador', severity: 'red' })).toBe(false)
+  })
+})
+
+describe('ARECF (Acuse de Recibo) — dedicated document path', () => {
+  it('a valid Estado=0 (Recibido) ARECF has no red issues', () => {
+    const issues = validateXml(loadFixture('arecf-recibido.xml'))
+    expect(hasIssue(issues, { severity: 'red' })).toBe(false)
+  })
+
+  it('a valid Estado=1 (No Recibido) ARECF with a motivo code has no red issues', () => {
+    const issues = validateXml(loadFixture('arecf-norecibido-ok.xml'))
+    expect(hasIssue(issues, { severity: 'red' })).toBe(false)
+  })
+
+  it('Estado=1 without CodigoMotivoNoRecibido is red', () => {
+    const issues = validateXml(loadFixture('arecf-norecibido-sin-motivo.xml'))
+    expect(hasIssue(issues, { field: 'CodigoMotivoNoRecibido', severity: 'red' })).toBe(true)
+  })
+
+  it('Estado=2 is invalid for ARECF (0/1 only, unlike ACECF)', () => {
+    const issues = validateXml(loadFixture('arecf-estado-invalido.xml'))
+    expect(hasIssue(issues, { field: 'Estado', severity: 'red' })).toBe(true)
+  })
+
+  it('an out-of-range CodigoMotivoNoRecibido is red', () => {
+    const issues = validateXml(loadFixture('arecf-motivo-invalido.xml'))
+    expect(hasIssue(issues, { field: 'CodigoMotivoNoRecibido', severity: 'red' })).toBe(true)
+  })
+})
+
 describe('ACECF (Aprobación Comercial) — dedicated document path', () => {
   it('a valid Estado=1 (Aceptado) ACECF has no red issues', () => {
     const issues = validateXml(loadFixture('acecf-aceptado.xml'))

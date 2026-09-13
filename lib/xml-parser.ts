@@ -37,6 +37,7 @@ const TIPO_MAP: Record<string, InvoiceType> = {
 export function detectInvoiceType(xml: string): InvoiceType {
   // ACECF (Aprobación Comercial) — a distinct document, not an e-CF. Detect first.
   if (/<ACECF[\s>]/.test(xml)) return 'ACECF'
+  if (/<ARECF[\s>]/.test(xml)) return 'ARECF'
 
   // RFCE documents have a different root element entirely
   if (/<RFCE[\s>]/.test(xml)) return 'E-32-R'

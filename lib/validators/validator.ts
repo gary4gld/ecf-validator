@@ -1,3 +1,4 @@
+import { runArecfChecks } from './arecf-checks'
 import { runAcecfChecks } from './acecf-checks'
 /**
  * Main validation entry point.
@@ -65,6 +66,7 @@ import {
   checkFechaHoraFirmaFutura,
   checkFechaEmisionReasonable,
   checkFechaReferenciaAntigua,
+  checkE41CompradorTipo,
   checkNCFModificadoPrefix,
   checkFechaVencimientoSecuencia,
   checkFechaDesdeHasta,
@@ -233,6 +235,7 @@ function runCrossFieldChecks(parsed: ParsedXml): ValidationIssue[] {
   push(checkFechaHoraFirmaFutura(xml, invoiceType, lines))
   push(checkFechaEmisionReasonable(xml, lines))
   push(checkFechaReferenciaAntigua(xml, invoiceType, lines))
+  push(checkE41CompradorTipo(xml, invoiceType, lines))
   push(checkNCFModificadoPrefix(xml, invoiceType, lines))
   push(checkFechaVencimientoSecuencia(xml, lines))
   push(checkFechaDesdeHasta(xml, lines))
@@ -314,6 +317,10 @@ export function validate(parsed: ParsedXml): ValidationIssue[] {
   // to its dedicated validator instead of the e-CF pipeline.
   if (invoiceType === 'ACECF') {
     return runAcecfChecks(parsed)
+  }
+
+  if (invoiceType === 'ARECF') {
+    return runArecfChecks(parsed)
   }
 
   const issues: ValidationIssue[] = [
