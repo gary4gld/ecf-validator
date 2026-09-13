@@ -89,7 +89,7 @@ export function runArecfChecks(parsed: ParsedXml): ValidationIssue[] {
     })
   }
   // Enum for the motivo code when present
-  if (motivo !== null && motivo !== '' && !MOTIVO_LABELS[motivo]) {
+  if (motivo !== null && !MOTIVO_LABELS[motivo]) {
     push(red('CodigoMotivoNoRecibido',
       `CodigoMotivoNoRecibido inválido: "${motivo}". Valores válidos: 1–4 (Error de Especificación, Error de Firma Digital, Envío Duplicado, RNC Comprador no Corresponde).`,
       /<CodigoMotivoNoRecibido>/))
@@ -98,10 +98,12 @@ export function runArecfChecks(parsed: ParsedXml): ValidationIssue[] {
   // ── RNC checksums ────────────────────────────────────────────────────────────
   for (const f of ['RNCEmisor', 'RNCComprador']) {
     const v = getValue(f, xml)
-    if (v && /^[0-9]+$/.test(v) && !isValidRNC(v)) {
-      push(red(f, `${f} (${v}) no supera la validación de dígito verificador (checksum RNC/Cédula).`, new RegExp(`<${f}>`)))
-    } else if (v && !/^[0-9]{9}$|^[0-9]{11}$/.test(v)) {
+    // Length/format first, so a wrong-length all-digit value reports "wrong length",
+    // not a misleading "checksum fails".
+    if (v && !/^[0-9]{9}$|^[0-9]{11}$/.test(v)) {
       push(red(f, `${f} (${v}) debe tener 9 u 11 dígitos numéricos sin guiones ni espacios.`, new RegExp(`<${f}>`)))
+    } else if (v && !isValidRNC(v)) {
+      push(red(f, `${f} (${v}) no supera la validación de dígito verificador (checksum RNC/Cédula).`, new RegExp(`<${f}>`)))
     }
   }
 

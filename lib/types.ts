@@ -14,7 +14,7 @@ export type InvoiceType =
   | 'E-44'    // Regímenes Especiales
   | 'E-45'    // Gubernamentales
   | 'E-46'    // Exportaciones
-  | 'E-47'    // Compras al Exterior
+  | 'E-47'    // Pagos al Exterior
   | 'ACECF'   // Aprobación Comercial (receiver approve/reject)
   | 'ARECF'   // Acuse de Recibo (technical receipt acknowledgment)
   | 'unknown'
@@ -30,7 +30,7 @@ export const INVOICE_TYPE_LABELS: Record<InvoiceType, string> = {
   'E-44':    'E-44 · Regímenes Especiales',
   'E-45':    'E-45 · Gubernamentales',
   'E-46':    'E-46 · Exportaciones',
-  'E-47':    'E-47 · Compras al Exterior',
+  'E-47':    'E-47 · Pagos al Exterior',
   'ACECF':   'ACECF · Aprobación Comercial',
   'ARECF':   'ARECF · Acuse de Recibo',
   'unknown': 'Tipo desconocido',

@@ -86,6 +86,16 @@ describe('ARECF (Acuse de Recibo) — dedicated document path', () => {
     const issues = validateXml(loadFixture('arecf-motivo-invalido.xml'))
     expect(hasIssue(issues, { field: 'CodigoMotivoNoRecibido', severity: 'red' })).toBe(true)
   })
+
+  it('an empty CodigoMotivoNoRecibido with Estado=1 is red', () => {
+    const issues = validateXml(loadFixture('arecf-motivo-vacio.xml'))
+    expect(hasIssue(issues, { field: 'CodigoMotivoNoRecibido', severity: 'red' })).toBe(true)
+  })
+
+  it('a future FechaHoraAcuseRecibo is red', () => {
+    const issues = validateXml(loadFixture('arecf-fecha-futura.xml'))
+    expect(hasIssue(issues, { field: 'FechaHoraAcuseRecibo', severity: 'red' })).toBe(true)
+  })
 })
 
 describe('ACECF (Aprobación Comercial) — dedicated document path', () => {
