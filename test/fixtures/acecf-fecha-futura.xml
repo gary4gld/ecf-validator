@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ACECF>
+  <DetalleAprobacionComercial>
+    <Version>1.0</Version>
+    <RNCEmisor>131880681</RNCEmisor>
+    <eNCF>E310000000001</eNCF>
+    <FechaEmision>12-09-2026</FechaEmision>
+    <MontoTotal>1180.00</MontoTotal>
+    <RNCComprador>101010101</RNCComprador>
+    <Estado>1</Estado>
+    <FechaHoraAprobacionComercial>01-01-2030 10:00:00</FechaHoraAprobacionComercial>
+  </DetalleAprobacionComercial>
+</ACECF>

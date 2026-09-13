@@ -15,6 +15,7 @@ export type InvoiceType =
   | 'E-45'    // Gubernamentales
   | 'E-46'    // Exportaciones
   | 'E-47'    // Compras al Exterior
+  | 'ACECF'   // Aprobación Comercial (receiver approve/reject)
   | 'unknown'
 
 export const INVOICE_TYPE_LABELS: Record<InvoiceType, string> = {
@@ -29,6 +30,7 @@ export const INVOICE_TYPE_LABELS: Record<InvoiceType, string> = {
   'E-45':    'E-45 · Gubernamentales',
   'E-46':    'E-46 · Exportaciones',
   'E-47':    'E-47 · Compras al Exterior',
+  'ACECF':   'ACECF · Aprobación Comercial',
   'unknown': 'Tipo desconocido',
 }
 

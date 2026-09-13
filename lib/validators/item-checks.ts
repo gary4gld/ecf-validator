@@ -1032,7 +1032,7 @@ function checkTablaSubcantidad(
   const subs = tabla.querySelectorAll('SubcantidadItem > Subcantidad')
   subs.forEach((el) => {
     const v = parseFloat(el.textContent?.trim() ?? '')
-    if (!isNaN(v) && v > cantidad + 0.001) {
+    if (!isNaN(v) && v > cantidad + 1e-6) {
       issues.push({
         id: nextId(), severity: 'yellow',
         field: 'Subcantidad',

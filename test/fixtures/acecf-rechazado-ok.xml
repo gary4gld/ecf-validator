@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ACECF>
+  <DetalleAprobacionComercial>
+    <Version>1.0</Version>
+    <RNCEmisor>131880681</RNCEmisor>
+    <eNCF>E310000000001</eNCF>
+    <FechaEmision>12-09-2026</FechaEmision>
+    <MontoTotal>1180.00</MontoTotal>
+    <RNCComprador>101010101</RNCComprador>
+    <Estado>2</Estado>
+    <DetalleMotivoRechazo>El monto total no coincide con los ítems facturados.</DetalleMotivoRechazo>
+    <FechaHoraAprobacionComercial>12-09-2026 14:00:00</FechaHoraAprobacionComercial>
+  </DetalleAprobacionComercial>
+</ACECF>

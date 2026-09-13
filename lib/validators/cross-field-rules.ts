@@ -370,8 +370,11 @@ export function checkFechaDesdeHasta(
  */
 export function checkFechaHoraFirmaConsistency(
   xml: string,
+  invoiceType: InvoiceType,
   lines: XmlLine[]
 ): ValidationIssue | null {
+  // RFCE has no FechaHoraFirma; if illegally present the forbidden-field check reports it.
+  if (invoiceType === "E-32-R") return null
   const firmaRaw   = getValue('FechaHoraFirma', xml)
   const emisionRaw = getValue('FechaEmision', xml)
   if (!firmaRaw || !emisionRaw) return null
@@ -427,8 +430,11 @@ const FIRMA_SKEW_YELLOW_MS = 5 * 60_000      // 5 minutes
  */
 export function checkFechaHoraFirmaFutura(
   xml: string,
+  invoiceType: InvoiceType,
   lines: XmlLine[]
 ): ValidationIssue | null {
+  // RFCE has no FechaHoraFirma; if illegally present the forbidden-field check reports it.
+  if (invoiceType === "E-32-R") return null
   const raw = getValue('FechaHoraFirma', xml)
   if (!raw) return null
 

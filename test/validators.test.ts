@@ -47,6 +47,33 @@ describe('E-33/E-34 stale reference note (#24)', () => {
   })
 })
 
+describe('ACECF (Aprobación Comercial) — dedicated document path', () => {
+  it('a valid Estado=1 (Aceptado) ACECF has no red issues', () => {
+    const issues = validateXml(loadFixture('acecf-aceptado.xml'))
+    expect(hasIssue(issues, { severity: 'red' })).toBe(false)
+  })
+
+  it('a valid Estado=2 (Rechazado) ACECF with a motivo has no red issues', () => {
+    const issues = validateXml(loadFixture('acecf-rechazado-ok.xml'))
+    expect(hasIssue(issues, { severity: 'red' })).toBe(false)
+  })
+
+  it('Estado=2 without DetalleMotivoRechazo is red', () => {
+    const issues = validateXml(loadFixture('acecf-rechazado-sin-motivo.xml'))
+    expect(hasIssue(issues, { field: 'DetalleMotivoRechazo', severity: 'red' })).toBe(true)
+  })
+
+  it('an invalid Estado value is red', () => {
+    const issues = validateXml(loadFixture('acecf-estado-invalido.xml'))
+    expect(hasIssue(issues, { field: 'Estado', severity: 'red' })).toBe(true)
+  })
+
+  it('a future FechaHoraAprobacionComercial is red', () => {
+    const issues = validateXml(loadFixture('acecf-fecha-futura.xml'))
+    expect(hasIssue(issues, { field: 'FechaHoraAprobacionComercial', severity: 'red' })).toBe(true)
+  })
+})
+
 describe('IndicadorNotaCredito enum (E-34) — guards the {0,1} vs {1,2} regression', () => {
   // If someone ever flips the enum back to {1,2}, BOTH of these go red:
   //   value 0 would wrongly become invalid, value 2 would wrongly become valid.

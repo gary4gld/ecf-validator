@@ -35,6 +35,9 @@ const TIPO_MAP: Record<string, InvoiceType> = {
  * the cross-field validator, not by the parser.
  */
 export function detectInvoiceType(xml: string): InvoiceType {
+  // ACECF (Aprobación Comercial) — a distinct document, not an e-CF. Detect first.
+  if (/<ACECF[\s>]/.test(xml)) return 'ACECF'
+
   // RFCE documents have a different root element entirely
   if (/<RFCE[\s>]/.test(xml)) return 'E-32-R'
 

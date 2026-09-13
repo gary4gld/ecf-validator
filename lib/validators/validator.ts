@@ -1,3 +1,4 @@
+import { runAcecfChecks } from './acecf-checks'
 /**
  * Main validation entry point.
  *
@@ -228,8 +229,8 @@ function runCrossFieldChecks(parsed: ParsedXml): ValidationIssue[] {
   pushAll(checkForbiddenFields(xml, invoiceType, lines))
   push(checkViaTransporteValue(xml, invoiceType, lines))
   push(checkIndicadorNotaCreditoDate(xml, invoiceType, lines))
-  push(checkFechaHoraFirmaConsistency(xml, lines))
-  push(checkFechaHoraFirmaFutura(xml, lines))
+  push(checkFechaHoraFirmaConsistency(xml, invoiceType, lines))
+  push(checkFechaHoraFirmaFutura(xml, invoiceType, lines))
   push(checkFechaEmisionReasonable(xml, lines))
   push(checkFechaReferenciaAntigua(xml, invoiceType, lines))
   push(checkNCFModificadoPrefix(xml, invoiceType, lines))
@@ -308,6 +309,12 @@ export function validate(parsed: ParsedXml): ValidationIssue[] {
   resetTypoCounter()
 
   const { raw, invoiceType, lines } = parsed
+
+  // ACECF (Aprobación Comercial) is a separate document with its own schema — route it
+  // to its dedicated validator instead of the e-CF pipeline.
+  if (invoiceType === 'ACECF') {
+    return runAcecfChecks(parsed)
+  }
 
   const issues: ValidationIssue[] = [
     ...runRequiredChecks(parsed),
