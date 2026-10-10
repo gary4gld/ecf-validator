@@ -7,6 +7,7 @@ import { colorizeXmlLine }    from '@/lib/xml-colorizer'
 import { validate }           from '@/lib/validators/validator'
 import { checkRNCRegistry }   from '@/lib/validators/registry-checks'
 import { INVOICE_TYPE_LABELS } from '@/lib/types'
+import { SAMPLE_INVOICES } from '@/lib/sample-invoices'
 import type { ParsedXml, ValidationIssue, XmlLine, Severity } from '@/lib/types'
 
 // ── Severity colour map ────────────────────────────────────────────────────────
@@ -177,6 +178,7 @@ function ErrorPanel({
 }) {
   const structural = issues.filter((i) => i.severity !== 'advisory')
   const advisories = issues.filter((i) => i.severity === 'advisory')
+  const [advOpen, setAdvOpen] = useState(false)
 
   if (structural.length === 0 && advisories.length === 0 && !registryPending) {
     return (
@@ -215,7 +217,7 @@ function ErrorPanel({
         }}
       >
         <p className="text-sm font-medium text-gray-300">
-          {structural.length} issue{structural.length !== 1 ? 's' : ''} encontrado{structural.length !== 1 ? 's' : ''}
+          {structural.length} problema{structural.length !== 1 ? 's' : ''} encontrado{structural.length !== 1 ? 's' : ''}
         </p>
       </div>
 
@@ -252,23 +254,44 @@ function ErrorPanel({
           </div>
         )}
 
-        {/* Advisory lane — informational only, deliberately separate from validity issues */}
+        {/* Advisory lane — informational only, collapsible, deliberately separate from validity issues */}
         {advisories.length > 0 && (
           <div className="mt-3 pt-3" style={{ borderTop: '1px dashed var(--border)' }}>
-            <p className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">
-              Consideraciones{' '}
-              <span className="normal-case tracking-normal text-gray-600">· informativo, no afecta la validez</span>
-            </p>
-            {advisories.map((a) => (
-              <div
-                key={a.id}
-                className="rounded-lg p-3 mb-2 last:mb-0"
-                style={{ background: 'rgba(148,163,184,0.05)', border: '1px solid rgba(148,163,184,0.12)' }}
+            <button
+              type="button"
+              onClick={() => setAdvOpen((v) => !v)}
+              aria-expanded={advOpen}
+              className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:brightness-125"
+              style={{ background: 'rgba(148,163,184,0.08)', border: '1px solid rgba(148,163,184,0.18)' }}
+            >
+              <span
+                aria-hidden="true"
+                className="text-gray-400 text-xs"
+                style={{ display: 'inline-block', transform: advOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}
               >
-                <p className="text-xs font-medium text-gray-400 mb-1">{a.field}</p>
-                <p className="text-xs text-gray-500 leading-relaxed">{a.message}</p>
+                ›
+              </span>
+              <span className="text-[11px] uppercase tracking-wide font-medium text-gray-300">
+                Consideraciones
+              </span>
+              <span className="ml-auto text-[11px] text-gray-500">
+                {advisories.length} · no afecta la validez
+              </span>
+            </button>
+            {advOpen && (
+              <div className="mt-2">
+                {advisories.map((a) => (
+                  <div
+                    key={a.id}
+                    className="rounded-lg p-3 mb-2 last:mb-0"
+                    style={{ background: 'rgba(148,163,184,0.05)', border: '1px solid rgba(148,163,184,0.12)' }}
+                  >
+                    <p className="text-xs font-medium text-gray-400 mb-1">{a.field}</p>
+                    <p className="text-xs text-gray-500 leading-relaxed">{a.message}</p>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>
@@ -323,6 +346,20 @@ export default function ValidatorPage() {
 
     return () => { cancelled = true }
   }, [parsedXml])
+
+  // ── Persist the paste-box content across refreshes (per-browser convenience) ──
+  const restoredRef = useRef(false)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('ecf:lastInput')
+      if (saved) setRawXml(saved)
+    } catch { /* storage unavailable (private mode, blocked) — ignore */ }
+    restoredRef.current = true
+  }, [])
+  useEffect(() => {
+    if (!restoredRef.current) return
+    try { localStorage.setItem('ecf:lastInput', rawXml) } catch { /* ignore */ }
+  }, [rawXml])
 
   // ── Click handlers ──────────────────────────────────────────────────────────
 
@@ -439,6 +476,12 @@ export default function ValidatorPage() {
   }, [])
 
   const handleValidate = () => processXml(rawXml)
+
+  /** Load a built-in example into the box and validate it immediately. */
+  const loadSample = (xml: string) => {
+    setRawXml(xml)
+    processXml(xml)
+  }
   // Reveal a floating "Validar otro" once the top button scrolls out of view
   // (long invoices push it far off-screen). Re-runs when results mount/unmount.
   useEffect(() => {
@@ -593,13 +636,28 @@ export default function ValidatorPage() {
 
             {parseError && <p className="mt-3 text-sm text-red-400">{parseError}</p>}
 
-            <button
-              onClick={handleValidate}
-              disabled={!rawXml.trim()}
-              className="mt-5 px-6 py-2.5 bg-white text-gray-950 text-sm font-medium rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Validar
-            </button>
+            <div className="mt-5 flex items-center gap-3 flex-wrap">
+              <button
+                onClick={handleValidate}
+                disabled={!rawXml.trim()}
+                className="px-6 py-2.5 bg-white text-gray-950 text-sm font-medium rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Validar
+              </button>
+              <span className="text-xs text-gray-600">o prueba un ejemplo:</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                {SAMPLE_INVOICES.map((s) => (
+                  <button
+                    key={s.label}
+                    onClick={() => loadSample(s.xml)}
+                    className="text-xs px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition-colors"
+                    style={{ border: '1px solid var(--border)', background: 'var(--bg-surface)' }}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
         ) : (
