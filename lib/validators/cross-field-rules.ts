@@ -607,6 +607,40 @@ export function checkE41CompradorTipo(
   }
 }
 
+// ── E-34 IndicadorNotaCredito advisory (CONSIDERATIONS #1) ────────────────────
+
+/**
+ * Advisory (not a validity check) for E-34: IndicadorNotaCredito depends on the ORIGINAL
+ * comprobante's date, which DGII may validate against its own records. A local pass only
+ * confirms consistency with the declared FechaNCFModificado. Deliberately hypothesis-NEUTRAL:
+ * it does NOT assert the unconfirmed "DGII uses the original's records-date" mechanism
+ * (see CONSIDERATIONS #2 — the código-156 cause is unknown; don't state it as fact). It
+ * simply surfaces the known blind spot + the observed symptom. Severity 'advisory' → shown in
+ * a separate, non-interfering area, never counted as an issue.
+ */
+export function checkIndicadorNotaCreditoAdvisory(
+  xml: string,
+  invoiceType: InvoiceType,
+  lines: XmlLine[]
+): ValidationIssue | null {
+  if (invoiceType !== 'E-34') return null
+  const indicador = getValue('IndicadorNotaCredito', xml)
+  if (!indicador) return null   // absent → already handled by required-fields
+
+  return {
+    id: nextId(),
+    severity: 'advisory',
+    field: 'IndicadorNotaCredito',
+    line: findLine(/<IndicadorNotaCredito>/, lines),
+    message:
+      'IndicadorNotaCredito depende de la fecha del comprobante original. Esta validación local ' +
+      'solo confirma la coherencia con la FechaNCFModificado declarada; DGII puede aplicar ' +
+      'validaciones adicionales que no pueden verificarse localmente. Si el e-CF es rechazado ' +
+      'con código 156 ("IndicadorNotaCredito no es válido") a pesar de un valor localmente ' +
+      'correcto, verifique la fecha y el estado del comprobante original directamente en el portal DGII.',
+  }
+}
+
 // ── NCFModificado prefix validation ───────────────────────────────────────────
 
 /**

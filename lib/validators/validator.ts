@@ -68,6 +68,7 @@ import {
   checkFechaEmisionReasonable,
   checkFechaReferenciaAntigua,
   checkE41CompradorTipo,
+  checkIndicadorNotaCreditoAdvisory,
   checkNCFModificadoPrefix,
   checkFechaVencimientoSecuencia,
   checkFechaDesdeHasta,
@@ -109,7 +110,7 @@ import {
 } from './conditional-checks'
 import { checkForTypos, resetTypoCounter } from './typo-checks'
 
-const SEV_ORDER = { red: 0, orange: 1, yellow: 2, blue: 3 } as const
+const SEV_ORDER = { red: 0, orange: 1, yellow: 2, blue: 3, advisory: 4 } as const
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
@@ -237,6 +238,7 @@ function runCrossFieldChecks(parsed: ParsedXml): ValidationIssue[] {
   push(checkFechaEmisionReasonable(xml, lines))
   push(checkFechaReferenciaAntigua(xml, invoiceType, lines))
   push(checkE41CompradorTipo(xml, invoiceType, lines))
+  push(checkIndicadorNotaCreditoAdvisory(xml, invoiceType, lines))
   push(checkNCFModificadoPrefix(xml, invoiceType, lines))
   push(checkFechaVencimientoSecuencia(xml, lines))
   push(checkFechaDesdeHasta(xml, lines))

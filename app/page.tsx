@@ -16,6 +16,7 @@ const SEV = {
   orange: { bg: 'rgba(249,115,22,0.09)', color: '#f97316', text: '#fb923c', labelS: 'discrepancia', labelP: 'discrepancias'  },
   yellow: { bg: 'rgba(234,179,8,0.09)',  color: '#eab308', text: '#fde047', labelS: 'advertencia',  labelP: 'advertencias'   },
   blue:   { bg: 'rgba(96,165,250,0.09)', color: '#60a5fa', text: '#93c5fd', labelS: 'nota',         labelP: 'notas'          },
+  advisory:{ bg: 'rgba(148,163,184,0.06)', color: '#94a3b8', text: '#cbd5e1', labelS: 'consideración', labelP: 'consideraciones' },
 } as const satisfies Record<Severity, { bg: string; color: string; text: string; labelS: string; labelP: string }>
 
 const SEV_ORDER: Severity[] = ['red', 'orange', 'yellow', 'blue']
@@ -141,7 +142,7 @@ function ErrorCard({
         />
         <code
           className="text-xs font-medium"
-          style={{ color: c.text, fontFamily: 'var(--font-mono)' }}
+          style={{ color: c.text, fontFamily: 'var(--font-mono), monospace' }}
         >
           &lt;{issue.field}&gt;
         </code>
@@ -174,7 +175,10 @@ function ErrorPanel({
   panelRef: React.RefObject<HTMLDivElement | null>
   registryPending: boolean
 }) {
-  if (issues.length === 0 && !registryPending) {
+  const structural = issues.filter((i) => i.severity !== 'advisory')
+  const advisories = issues.filter((i) => i.severity === 'advisory')
+
+  if (structural.length === 0 && advisories.length === 0 && !registryPending) {
     return (
       <div
         className="rounded-2xl flex flex-col items-center justify-center py-12 px-6 text-center"
@@ -195,11 +199,10 @@ function ErrorPanel({
   return (
     <div
       ref={panelRef}
-      className="rounded-2xl overflow-y-auto"
+      className="rounded-2xl overflow-y-auto lg:max-h-[640px]"
       style={{
         border: '1px solid var(--border)',
         background: 'var(--bg-surface)',
-        maxHeight: '640px',
       }}
     >
       {/* Panel header */}
@@ -212,14 +215,14 @@ function ErrorPanel({
         }}
       >
         <p className="text-sm font-medium text-gray-300">
-          {issues.length} issue{issues.length !== 1 ? 's' : ''} encontrado{issues.length !== 1 ? 's' : ''}
+          {structural.length} issue{structural.length !== 1 ? 's' : ''} encontrado{structural.length !== 1 ? 's' : ''}
         </p>
       </div>
 
-      {/* Cards — sorted red → orange → yellow → blue */}
+      {/* Cards — sorted red → orange → yellow → blue (advisories render separately below) */}
       <div className="p-3">
         {SEV_ORDER.flatMap((sev) =>
-          issues
+          structural
             .filter((i) => i.severity === sev)
             .map((issue) => (
               <ErrorCard
@@ -248,6 +251,26 @@ function ErrorPanel({
             <span className="text-xs text-blue-400">Verificando RNCs en registro DGII…</span>
           </div>
         )}
+
+        {/* Advisory lane — informational only, deliberately separate from validity issues */}
+        {advisories.length > 0 && (
+          <div className="mt-3 pt-3" style={{ borderTop: '1px dashed var(--border)' }}>
+            <p className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">
+              Consideraciones{' '}
+              <span className="normal-case tracking-normal text-gray-600">· informativo, no afecta la validez</span>
+            </p>
+            {advisories.map((a) => (
+              <div
+                key={a.id}
+                className="rounded-lg p-3 mb-2 last:mb-0"
+                style={{ background: 'rgba(148,163,184,0.05)', border: '1px solid rgba(148,163,184,0.12)' }}
+              >
+                <p className="text-xs font-medium text-gray-400 mb-1">{a.field}</p>
+                <p className="text-xs text-gray-500 leading-relaxed">{a.message}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -266,10 +289,12 @@ export default function ValidatorPage() {
   const [activeIssueId, setActiveIssueId] = useState<string | null>(null)
   const [registryIssues,  setRegistryIssues]  = useState<ValidationIssue[]>([])
   const [registryPending, setRegistryPending] = useState(false)
+  const [showFloatingReset, setShowFloatingReset] = useState(false)
 
   const fileInputRef    = useRef<HTMLInputElement>(null)
   const xmlContainerRef = useRef<HTMLDivElement>(null)
   const errorPanelRef   = useRef<HTMLDivElement>(null)
+  const topResetRef     = useRef<HTMLButtonElement>(null)
 
   // ── Async registry check ─────────────────────────────────────────────────────
 
@@ -399,7 +424,7 @@ export default function ValidatorPage() {
 
       // Map issues back to lines so the viewer can highlight them
       const mappedLines = rawLines.map((line) => {
-        const hit = issues.find((issue) => issue.line === line.number)
+        const hit = issues.find((issue) => issue.line === line.number && issue.severity !== 'advisory')
         return hit ? { ...line, severity: hit.severity, issueId: hit.id } : line
       })
 
@@ -414,6 +439,21 @@ export default function ValidatorPage() {
   }, [])
 
   const handleValidate = () => processXml(rawXml)
+  // Reveal a floating "Validar otro" once the top button scrolls out of view
+  // (long invoices push it far off-screen). Re-runs when results mount/unmount.
+  useEffect(() => {
+    const el = topResetRef.current
+    if (!el) {
+      setShowFloatingReset(false)
+      return
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => setShowFloatingReset(!entry.isIntersecting),
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [parsedXml])
+
   const handleReset    = () => {
     setRawXml('')
     setParsedXml(null)
@@ -450,7 +490,8 @@ export default function ValidatorPage() {
     {},
   ) ?? {}
 
-  const allClear = allIssues.length === 0 && !registryPending
+  const allClear = allIssues.filter((i) => i.severity !== 'advisory').length === 0 && !registryPending
+  const structuralCount = allIssues.filter((i) => i.severity !== 'advisory').length
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -464,7 +505,7 @@ export default function ValidatorPage() {
       >
         <div className="flex items-center gap-3">
           <span className="font-semibold text-white text-sm">ECF XML Validator</span>
-          <span className="text-xs bg-blue-950 text-blue-300 px-2 py-0.5 rounded-full">beta</span>
+          <span className="text-[11px] text-gray-500 tracking-wide" style={{ fontFamily: 'var(--font-mono), monospace' }}>v1.0</span>
         </div>
         <a
           href="https://github.com/gary4gld"
@@ -586,7 +627,7 @@ export default function ValidatorPage() {
                 <span className="text-sm text-gray-500">{parsedXml.lines.length} líneas</span>
 
                 {/* Severity badges — only shown severities that have ≥ 1 issue */}
-                {allIssues.length > 0 && (
+                {structuralCount > 0 && (
                   <>
                     <span className="text-gray-700">·</span>
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -626,6 +667,7 @@ export default function ValidatorPage() {
               </div>
 
               <button
+                ref={topResetRef}
                 onClick={handleReset}
                 className="text-xs text-gray-500 hover:text-white transition-colors shrink-0"
               >
@@ -638,7 +680,7 @@ export default function ValidatorPage() {
 
               {/* XML viewer — left */}
               <div
-                className="flex-1 min-w-0 rounded-2xl overflow-hidden"
+                className="flex-1 min-w-0 w-full rounded-2xl overflow-hidden"
                 style={{ border: '1px solid var(--border)' }}
               >
                 <div
@@ -678,6 +720,22 @@ export default function ValidatorPage() {
               </div>
 
             </div>
+
+            {/* Floating reset — fades in once the top button scrolls off (long invoices) */}
+            <button
+              onClick={handleReset}
+              aria-hidden={!showFloatingReset}
+              tabIndex={showFloatingReset ? 0 : -1}
+              className={`fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-full text-xs font-medium text-gray-200 transition-opacity duration-200 hover:text-white ${showFloatingReset ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+              style={{
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                backdropFilter: 'blur(8px)',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+              }}
+            >
+              ↑ Validar otro
+            </button>
           </div>
         )}
       </main>
@@ -688,7 +746,7 @@ export default function ValidatorPage() {
         style={{ borderColor: 'var(--border)' }}
       >
         <span>ECF XML Validator — Gary De la Cruz</span>
-        <span>Open source · In development</span>
+        <span>Open source</span>
       </footer>
     </div>
   )

@@ -180,6 +180,16 @@ describe('IndicadorNotaCredito enum (E-34) — guards the {0,1} vs {1,2} regress
     const issues = validateXml(loadFixture('e34-notacredito-invalid2.xml'))
     expect(hasIssue(issues, { field: 'IndicadorNotaCredito', severity: 'red' })).toBe(true)
   })
+
+  it('surfaces an advisory (not blue) on IndicadorNotaCredito reminding about DGII records risk', () => {
+    const issues = validateXml(loadFixture('e34-notacredito-valid0.xml'))
+    expect(hasIssue(issues, { field: 'IndicadorNotaCredito', severity: 'advisory' })).toBe(true)
+    // it's advisory-lane, never a blue issue bubble
+    expect(hasIssue(issues, { field: 'IndicadorNotaCredito', severity: 'blue' })).toBe(false)
+    // and it must NOT assert the unconfirmed records-date mechanism
+    const adv = issues.find(i => i.field === 'IndicadorNotaCredito' && i.severity === 'advisory')!
+    expect(adv.message.toLowerCase()).not.toContain('registros')
+  })
 })
 
 describe('TipoMoneda enum — guards the 17-code / COP addition', () => {

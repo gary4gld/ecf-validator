@@ -40,7 +40,7 @@ export const INVOICE_TYPE_LABELS: Record<InvoiceType, string> = {
 
 // ── Validation ────────────────────────────────────────────────────────────────
 
-export type Severity = 'red' | 'orange' | 'yellow' | 'blue'
+export type Severity = 'red' | 'orange' | 'yellow' | 'blue' | 'advisory'
 
 export interface ValidationIssue {
   id: string
