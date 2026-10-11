@@ -162,6 +162,26 @@ function ErrorCard({
   )
 }
 
+/** Serialize the full issue list to a human-readable text summary. */
+function issuesToText(issues: ValidationIssue[]): string {
+  if (issues.length === 0) return 'Sin problemas — el XML pasó todas las validaciones.'
+  return issues
+    .map((i) => {
+      const loc = i.line != null ? `línea ${i.line}` : 'documento'
+      return `[${i.severity.toUpperCase()}] <${i.field}> (${loc})\n${i.message}`
+    })
+    .join('\n\n')
+}
+
+/** Serialize the full issue list to JSON. */
+function issuesToJson(issues: ValidationIssue[]): string {
+  return JSON.stringify(
+    issues.map(({ severity, field, line, message }) => ({ severity, field, line, message })),
+    null,
+    2,
+  )
+}
+
 /** Right-hand error panel — scrollable, sticky on desktop. */
 function ErrorPanel({
   issues,
@@ -169,16 +189,40 @@ function ErrorPanel({
   onSelect,
   panelRef,
   registryPending,
+  hiddenSeverities,
 }: {
   issues: ValidationIssue[]
   activeIssueId: string | null
   onSelect: (id: string) => void
   panelRef: React.RefObject<HTMLDivElement | null>
   registryPending: boolean
+  hiddenSeverities: Set<Severity>
 }) {
   const structural = issues.filter((i) => i.severity !== 'advisory')
   const advisories = issues.filter((i) => i.severity === 'advisory')
+  const visibleStructural = structural.filter((i) => !hiddenSeverities.has(i.severity))
   const [advOpen, setAdvOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = () => {
+    try {
+      navigator.clipboard?.writeText(issuesToText(issues))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch { /* clipboard unavailable — ignore */ }
+  }
+
+  const handleExport = () => {
+    try {
+      const blob = new Blob([issuesToJson(issues)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'validacion-ecf.json'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch { /* download unavailable — ignore */ }
+  }
 
   if (structural.length === 0 && advisories.length === 0 && !registryPending) {
     return (
@@ -209,7 +253,7 @@ function ErrorPanel({
     >
       {/* Panel header */}
       <div
-        className="sticky top-0 px-4 py-3"
+        className="sticky top-0 px-4 py-3 flex items-center justify-between gap-2"
         style={{
           borderBottom: '1px solid var(--border)',
           background: 'var(--bg-surface)',
@@ -219,12 +263,30 @@ function ErrorPanel({
         <p className="text-sm font-medium text-gray-300">
           {structural.length} problema{structural.length !== 1 ? 's' : ''} encontrado{structural.length !== 1 ? 's' : ''}
         </p>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="text-[11px] px-2 py-0.5 rounded-md text-gray-400 hover:text-white transition-colors"
+            style={{ border: '1px solid var(--border)' }}
+          >
+            {copied ? 'Copiado ✓' : 'Copiar'}
+          </button>
+          <button
+            type="button"
+            onClick={handleExport}
+            className="text-[11px] px-2 py-0.5 rounded-md text-gray-400 hover:text-white transition-colors"
+            style={{ border: '1px solid var(--border)' }}
+          >
+            JSON
+          </button>
+        </div>
       </div>
 
       {/* Cards — sorted red → orange → yellow → blue (advisories render separately below) */}
       <div className="p-3">
         {SEV_ORDER.flatMap((sev) =>
-          structural
+          visibleStructural
             .filter((i) => i.severity === sev)
             .map((issue) => (
               <ErrorCard
@@ -284,10 +346,10 @@ function ErrorPanel({
                   <div
                     key={a.id}
                     className="rounded-lg p-3 mb-2 last:mb-0"
-                    style={{ background: 'rgba(148,163,184,0.05)', border: '1px solid rgba(148,163,184,0.12)' }}
+                    style={{ background: 'rgba(148,163,184,0.08)', border: '1px solid rgba(148,163,184,0.22)' }}
                   >
-                    <p className="text-xs font-medium text-gray-400 mb-1">{a.field}</p>
-                    <p className="text-xs text-gray-500 leading-relaxed">{a.message}</p>
+                    <p className="text-xs font-medium text-gray-200 mb-1">{a.field}</p>
+                    <p className="text-xs text-gray-300 leading-relaxed">{a.message}</p>
                   </div>
                 ))}
               </div>
@@ -313,6 +375,15 @@ export default function ValidatorPage() {
   const [registryIssues,  setRegistryIssues]  = useState<ValidationIssue[]>([])
   const [registryPending, setRegistryPending] = useState(false)
   const [showFloatingReset, setShowFloatingReset] = useState(false)
+  const [hiddenSeverities, setHiddenSeverities] = useState<Set<Severity>>(new Set())
+
+  const toggleSeverity = (sev: Severity) =>
+    setHiddenSeverities((prev) => {
+      const next = new Set(prev)
+      if (next.has(sev)) next.delete(sev)
+      else next.add(sev)
+      return next
+    })
 
   const fileInputRef    = useRef<HTMLInputElement>(null)
   const xmlContainerRef = useRef<HTMLDivElement>(null)
@@ -388,6 +459,7 @@ export default function ValidatorPage() {
     setActiveIssueId(null)
     setRegistryIssues([])
     setRegistryPending(false)
+    setHiddenSeverities(new Set())
 
     // ── Pre-check: detect malformed XML before any processing ─────────────────
     // DOMParser silently returns a <parsererror> document for invalid XML.
@@ -693,19 +765,26 @@ export default function ValidatorPage() {
                         const n = counts[sev] ?? 0
                         if (!n) return null
                         const c = SEV[sev]
+                        const off = hiddenSeverities.has(sev)
                         return (
-                          <span
+                          <button
                             key={sev}
-                            className="text-xs px-2.5 py-0.5 rounded-full flex items-center gap-1.5"
+                            type="button"
+                            onClick={() => toggleSeverity(sev)}
+                            aria-pressed={!off}
+                            title={off ? `Mostrar ${c.labelP}` : `Ocultar ${c.labelP}`}
+                            className="text-xs px-2.5 py-0.5 rounded-full flex items-center gap-1.5 cursor-pointer transition-opacity"
                             style={{
                               background: c.bg,
                               border: `1px solid ${c.color}40`,
                               color: c.text,
+                              opacity: off ? 0.4 : 1,
+                              textDecoration: off ? 'line-through' : 'none',
                             }}
                           >
                             <span className="w-1.5 h-1.5 rounded-full" style={{ background: c.color }} />
                             {n} {n === 1 ? c.labelS : c.labelP}
-                          </span>
+                          </button>
                         )
                       })}
                     </div>
@@ -774,6 +853,7 @@ export default function ValidatorPage() {
                   onSelect={handleSelectIssue}
                   panelRef={errorPanelRef}
                   registryPending={registryPending}
+                  hiddenSeverities={hiddenSeverities}
                 />
               </div>
 
