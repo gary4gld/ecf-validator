@@ -56,6 +56,7 @@ import {
   resetCrossCounter,
   checkEncfTipoMismatch,
   checkSignaturePresence,
+  checkSignatureStructure,
   checkE32RfceRequirement,
   checkRfceCodigoNote,
   checkVersion,
@@ -228,6 +229,7 @@ function runCrossFieldChecks(parsed: ParsedXml): ValidationIssue[] {
   push(checkEncfTipoMismatch(xml, lines))
   push(checkFechaHoraFirma(xml, invoiceType, lines))
   push(checkSignaturePresence(xml, lines))
+  pushAll(checkSignatureStructure(xml, lines))
   push(checkE32RfceRequirement(xml, invoiceType, lines))
   push(checkRfceCodigoNote(xml, invoiceType, lines))
   pushAll(checkForbiddenFields(xml, invoiceType, lines))

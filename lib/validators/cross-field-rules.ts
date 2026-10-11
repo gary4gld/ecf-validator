@@ -88,6 +88,66 @@ export function checkSignaturePresence(
   return null
 }
 
+/**
+ * Structural validation of a digital-signature block — STRUCTURE ONLY.
+ *
+ * Runs only when a signature is present. It confirms the XMLDSig block is
+ * well-formed (the required child elements exist) and that its critical values are
+ * non-empty. It deliberately does NOT — and cannot — verify the CRYPTOGRAPHIC
+ * validity of the signature or the certificate: that depends on the signing
+ * credentials (issued by an authorized PSC, unexpired, trusted chain) and on the
+ * signature verifying against the signed bytes, which is out of scope for a static
+ * client-side validator. The honest ceiling here is "the block is well-formed".
+ */
+export function checkSignatureStructure(xml: string, lines: XmlLine[]): ValidationIssue[] {
+  const hasSig =
+    /<(?:ds:)?Signature[\s>]/.test(xml) ||
+    /<(?:ds:)?SignatureValue[\s>]/.test(xml) ||
+    xml.includes('<FirmaDigital')
+  if (!hasSig) return [] // pre-firma is handled by checkSignaturePresence
+
+  const issues: ValidationIssue[] = []
+  const has = (tag: string) => new RegExp(`<(?:ds:)?${tag}[\\s>]`).test(xml)
+  const inner = (tag: string): string | null => {
+    const m = xml.match(new RegExp(`<(?:ds:)?${tag}[^>]*>([\\s\\S]*?)</(?:ds:)?${tag}>`))
+    return m ? m[1].trim() : null
+  }
+
+  // Required structural parts of an XMLDSig enveloped signature.
+  const missing = (['SignedInfo', 'SignatureValue', 'DigestValue', 'KeyInfo', 'X509Certificate'] as const)
+    .filter((t) => !has(t))
+  if (missing.length > 0) {
+    issues.push({
+      id: nextId(),
+      severity: 'orange',
+      field: 'Firma digital',
+      line: findLine(/<(?:ds:)?Signature[\s>]/, lines),
+      message: `El bloque de firma está presente pero le faltan elementos de la estructura XMLDSig: ${missing.join(', ')}. Una firma incompleta será rechazada por DGII. (Esta verificación es solo estructural; no comprueba la validez criptográfica del certificado ni de la firma.)`,
+    })
+  }
+
+  // Critical values must not be present-but-empty.
+  const emptyChecks: Array<[string, 'red' | 'orange', string]> = [
+    ['SignatureValue', 'red', 'SignatureValue está presente pero vacío: la firma no contiene ningún valor y será rechazada por DGII.'],
+    ['DigestValue', 'red', 'DigestValue está presente pero vacío: falta el resumen (hash) del documento y la firma será rechazada por DGII.'],
+    ['X509Certificate', 'orange', 'X509Certificate está presente pero vacío: no se incluye el certificado del firmante, requerido por DGII.'],
+  ]
+  for (const [tag, sev, msg] of emptyChecks) {
+    const v = inner(tag)
+    if (v !== null && v.length === 0) {
+      issues.push({
+        id: nextId(),
+        severity: sev,
+        field: tag,
+        line: findLine(new RegExp(`<(?:ds:)?${tag}[\\s>]`), lines),
+        message: msg,
+      })
+    }
+  }
+
+  return issues
+}
+
 // ── E-32 RFCE threshold note ──────────────────────────────────────────────────
 
 /**

@@ -323,3 +323,51 @@ describe('TipoIngresos requiredness — guards the E-33/E-34 optional split (Apr
     expect(hasIssue(issues, { field: 'TipoIngresos', message: 'obligatorio' })).toBe(true)
   })
 })
+
+describe('Signature structure — structural only, never cryptographic validity', () => {
+  const wrap = (sig: string) =>
+    `<?xml version="1.0" encoding="UTF-8"?>
+<ECF>
+  <Encabezado>
+    <Version>1.0</Version>
+    <IdDoc><TipoeCF>31</TipoeCF><eNCF>E310000000001</eNCF></IdDoc>
+    <Emisor><RNCEmisor>131880681</RNCEmisor><FechaEmision>15-09-2026</FechaEmision></Emisor>
+    <Comprador><RNCComprador>131880681</RNCComprador></Comprador>
+    <Totales><MontoTotal>1000.00</MontoTotal></Totales>
+  </Encabezado>
+  <DetallesItems><Item><NumeroLinea>1</NumeroLinea><NombreItem>X</NombreItem><CantidadItem>1</CantidadItem><PrecioUnitarioItem>1000.00</PrecioUnitarioItem><MontoItem>1000.00</MontoItem></Item></DetallesItems>
+  <FechaHoraFirma>15-09-2026 10:30:00</FechaHoraFirma>
+  ${sig}
+</ECF>`
+
+  const COMPLETE = `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+    <SignedInfo><Reference><DigestValue>QUJD</DigestValue></Reference></SignedInfo>
+    <SignatureValue>U0lHTkVE</SignatureValue>
+    <KeyInfo><X509Data><X509Certificate>Q0VSVA==</X509Certificate></X509Data></KeyInfo>
+  </Signature>`
+
+  it('accepts a structurally complete signature (no structural issue)', () => {
+    const issues = validateXml(wrap(COMPLETE))
+    expect(hasIssue(issues, { field: 'Firma digital', severity: 'orange' })).toBe(false)
+    expect(hasIssue(issues, { field: 'SignatureValue' })).toBe(false)
+    // and it is NOT treated as pre-firma
+    expect(hasIssue(issues, { field: 'Firma digital', severity: 'blue' })).toBe(false)
+  })
+
+  it('flags an empty SignatureValue as red', () => {
+    const sig = COMPLETE.replace('<SignatureValue>U0lHTkVE</SignatureValue>', '<SignatureValue></SignatureValue>')
+    const issues = validateXml(wrap(sig))
+    expect(hasIssue(issues, { field: 'SignatureValue', severity: 'red', message: 'vacío' })).toBe(true)
+  })
+
+  it('flags a signature block missing XMLDSig parts (orange)', () => {
+    const issues = validateXml(wrap('<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignatureValue>U0lHTkVE</SignatureValue></Signature>'))
+    expect(hasIssue(issues, { field: 'Firma digital', severity: 'orange', message: 'estructura XMLDSig' })).toBe(true)
+  })
+
+  it('does not run structural checks on a pre-firma document (only the blue note)', () => {
+    const issues = validateXml(wrap('').replace(/<FechaHoraFirma>.*<\/FechaHoraFirma>/, ''))
+    expect(hasIssue(issues, { field: 'Firma digital', severity: 'orange' })).toBe(false)
+    expect(hasIssue(issues, { field: 'Firma digital', severity: 'blue' })).toBe(true)
+  })
+})
