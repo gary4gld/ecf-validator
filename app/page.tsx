@@ -162,10 +162,18 @@ function ErrorCard({
   )
 }
 
+/** Severity order used everywhere (display + export): most → least severe, advisory last. */
+const SEVERITY_RANK: Record<Severity, number> = { red: 0, orange: 1, yellow: 2, blue: 3, advisory: 4 }
+
+/** Sort issues by severity (stable), so exports match the on-screen grouping. */
+function sortBySeverity(issues: ValidationIssue[]): ValidationIssue[] {
+  return [...issues].sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity])
+}
+
 /** Serialize the full issue list to a human-readable text summary. */
 function issuesToText(issues: ValidationIssue[]): string {
   if (issues.length === 0) return 'Sin problemas — el XML pasó todas las validaciones.'
-  return issues
+  return sortBySeverity(issues)
     .map((i) => {
       const loc = i.line != null ? `línea ${i.line}` : 'documento'
       return `[${i.severity.toUpperCase()}] <${i.field}> (${loc})\n${i.message}`
@@ -176,7 +184,7 @@ function issuesToText(issues: ValidationIssue[]): string {
 /** Serialize the full issue list to JSON. */
 function issuesToJson(issues: ValidationIssue[]): string {
   return JSON.stringify(
-    issues.map(({ severity, field, line, message }) => ({ severity, field, line, message })),
+    sortBySeverity(issues).map(({ severity, field, line, message }) => ({ severity, field, line, message })),
     null,
     2,
   )
