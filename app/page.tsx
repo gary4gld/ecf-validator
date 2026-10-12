@@ -631,11 +631,11 @@ export default function ValidatorPage() {
           <span className="text-[11px] text-gray-500 tracking-wide" style={{ fontFamily: 'var(--font-mono), monospace' }}>v1.0</span>
         </div>
         <a
-          href="https://github.com/gary4gld"
+          href="https://github.com/gary4gld/ecf-validator"
           target="_blank"
           rel="noopener noreferrer"
           className="text-gray-500 hover:text-white transition-colors"
-          aria-label="GitHub"
+          aria-label="Repositorio en GitHub"
         >
           <GitHubIcon />
         </a>
