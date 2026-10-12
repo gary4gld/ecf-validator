@@ -170,6 +170,15 @@ function sortBySeverity(issues: ValidationIssue[]): ValidationIssue[] {
   return [...issues].sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity])
 }
 
+/** Legend copy — one short meaning per severity, shown in the "?" reveal. */
+const LEGEND: Array<{ sev: Severity; meaning: string }> = [
+  { sev: 'red',      meaning: 'Rechazo por la DGII' },
+  { sev: 'orange',   meaning: 'Montos o totales que no cuadran' },
+  { sev: 'yellow',   meaning: 'Posible problema; conviene revisar' },
+  { sev: 'blue',     meaning: 'Informativo (p. ej. documento pre-firma)' },
+  { sev: 'advisory', meaning: 'Aviso que no afecta la validez' },
+]
+
 /** Serialize the full issue list to a human-readable text summary. */
 function issuesToText(issues: ValidationIssue[]): string {
   if (issues.length === 0) return 'Sin problemas — el XML pasó todas las validaciones.'
@@ -384,6 +393,7 @@ export default function ValidatorPage() {
   const [registryPending, setRegistryPending] = useState(false)
   const [showFloatingReset, setShowFloatingReset] = useState(false)
   const [hiddenSeverities, setHiddenSeverities] = useState<Set<Severity>>(new Set())
+  const [legendOpen, setLegendOpen] = useState(false)
 
   const toggleSeverity = (sev: Severity) =>
     setHiddenSeverities((prev) => {
@@ -809,6 +819,19 @@ export default function ValidatorPage() {
                     </span>
                   </>
                 )}
+
+                {/* Legend toggle — reveals the severity legend in-flow (mobile-safe) */}
+                <button
+                  type="button"
+                  onClick={() => setLegendOpen((v) => !v)}
+                  aria-expanded={legendOpen}
+                  aria-label="Leyenda de niveles"
+                  title="Leyenda de niveles"
+                  className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] text-gray-400 hover:text-white transition-colors shrink-0"
+                  style={{ border: '1px solid var(--border)' }}
+                >
+                  ?
+                </button>
               </div>
 
               <button
@@ -819,6 +842,27 @@ export default function ValidatorPage() {
                 ← Validar otro
               </button>
             </div>
+
+            {/* Severity legend — revealed by the ? in the info bar; in-flow, so it never
+                overflows the viewport on mobile the way a floating popover could. */}
+            {legendOpen && (
+              <div className="rounded-xl px-5 py-3" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                <div className="flex flex-wrap gap-x-5 gap-y-2">
+                  {LEGEND.map(({ sev, meaning }) => {
+                    const c = SEV[sev]
+                    return (
+                      <div key={sev} className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: c.color }} />
+                        <span className="text-xs">
+                          <span className="font-medium capitalize" style={{ color: c.text }}>{c.labelS}</span>
+                          <span className="text-gray-500"> — {meaning}</span>
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Split pane */}
             <div className="flex flex-col lg:flex-row gap-4 items-start">
