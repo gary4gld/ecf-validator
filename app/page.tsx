@@ -936,7 +936,7 @@ export default function ValidatorPage() {
         style={{ borderColor: 'var(--border)' }}
       >
         <span>ECF XML Validator — Gary De la Cruz</span>
-        <span>Open source</span>
+        <span>Free to use</span>
       </footer>
     </div>
   )
