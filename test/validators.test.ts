@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { validateXml, hasIssue, loadFixture } from './helpers'
 import { isValidRNC } from '@/lib/validators/format-checks'
+import { getBusinessContextHints } from '@/lib/validators/registry-checks'
 
 /**
  * Regression suite for the ECF validator.
@@ -369,5 +370,51 @@ describe('Signature structure — structural only, never cryptographic validity'
     const issues = validateXml(wrap('').replace(/<FechaHoraFirma>.*<\/FechaHoraFirma>/, ''))
     expect(hasIssue(issues, { field: 'Firma digital', severity: 'orange' })).toBe(false)
     expect(hasIssue(issues, { field: 'Firma digital', severity: 'blue' })).toBe(true)
+  })
+})
+describe('Business-context hints — advisory, from the emitter DGII registration', () => {
+  // Real Neural activity strings (two companies, distinct RNCs).
+  const NSS = { error: false, codigo_http: 200, mensaje: '', estado: 'ACTIVO',
+    nombre_razon_social: 'NEURAL SOFTWARE SOLUTIONS',
+    actividad_economica: 'DISEÑO Y DESARROLLO DE SOFTWARE', categoria: 'ZONA FRANCA INDUSTRIAL' }
+  const NTS = { error: false, codigo_http: 200, mensaje: '', estado: 'ACTIVO',
+    nombre_razon_social: 'NEURAL TECHNOLOGY SOLUTIONS',
+    actividad_economica: 'SERVICIOS DE CONSULTORES EN INFORMATICA Y SUMINISTROS DE PROGRAMAS DE INFORMATICA' }
+
+  const withItems = (...names: string[]) =>
+    `<ECF><DetallesItems>${names.map((n) => `<Item><NombreItem>${n}</NombreItem></Item>`).join('')}</DetallesItems></ECF>`
+
+  it('surfaces the registered activity (and categoría) as an advisory context note', () => {
+    const h = getBusinessContextHints(NSS, withItems('Desarrollo de software a la medida'))
+    expect(hasIssue(h, { field: 'Actividad del emisor', severity: 'advisory', message: 'DISEÑO Y DESARROLLO DE SOFTWARE' })).toBe(true)
+    expect(hasIssue(h, { field: 'Actividad del emisor', message: 'ZONA FRANCA INDUSTRIAL' })).toBe(true)
+  })
+
+  it('does NOT flag items consistent with the activity', () => {
+    const h = getBusinessContextHints(NSS, withItems('Licencia de software anual', 'Horas de consultoría'))
+    expect(hasIssue(h, { field: 'Contexto de negocio' })).toBe(false)
+  })
+
+  it('flags clearly out-of-industry products (software company selling milk & chicken)', () => {
+    const h = getBusinessContextHints(NSS, withItems('Leche entera 1L', 'Pollo fresco'))
+    expect(hasIssue(h, { field: 'Contexto de negocio', severity: 'advisory', message: 'Leche entera' })).toBe(true)
+    expect(hasIssue(h, { field: 'Contexto de negocio', message: 'Pollo fresco' })).toBe(true)
+  })
+
+  it('flags construction products on an IT consultancy (NTS)', () => {
+    const h = getBusinessContextHints(NTS, withItems('Cemento gris 42.5kg'))
+    expect(hasIssue(h, { field: 'Contexto de negocio', message: 'Cemento' })).toBe(true)
+  })
+
+  it('stays silent on layer-2 when the emitter activity is unrecognized (but keeps context)', () => {
+    const legal = { ...NSS, actividad_economica: 'SERVICIOS JURIDICOS Y LEGALES', categoria: '' }
+    const h = getBusinessContextHints(legal, withItems('Leche entera 1L'))
+    expect(hasIssue(h, { field: 'Actividad del emisor' })).toBe(true)
+    expect(hasIssue(h, { field: 'Contexto de negocio' })).toBe(false)
+  })
+
+  it('returns nothing when the emitter has no declared activity', () => {
+    const noAct = { ...NSS, actividad_economica: '' }
+    expect(getBusinessContextHints(noAct, withItems('Pollo fresco'))).toHaveLength(0)
   })
 })
