@@ -102,7 +102,7 @@ function XmlLineRow({
         {line.number}
       </span>
       <span
-        className="flex-1 whitespace-pre overflow-hidden pr-6"
+        className="flex-1 whitespace-pre pr-6"
         style={{ color: '#e6edf3' }}
         dangerouslySetInnerHTML={{ __html: colorizeXmlLine(line.content) }}
       />
@@ -885,6 +885,10 @@ export default function ValidatorPage() {
                     minHeight: '480px',
                   }}
                 >
+                  {/* w-max + min-w-full: every row is as wide as the longest line, so
+                      long lines scroll sideways instead of being clipped, and
+                      highlighted rows stay full width. */}
+                  <div className="w-max min-w-full">
                   {parsedXml.lines.map((line) => (
                     <XmlLineRow
                       key={line.number}
@@ -894,6 +898,7 @@ export default function ValidatorPage() {
                       onClick={line.issueId ? () => handleLineClick(line.issueId!) : undefined}
                     />
                   ))}
+                  </div>
                 </div>
               </div>
 
