@@ -17,6 +17,7 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://ecf-validator.garydelacruz.dev'),
   title: 'ECF XML Validator',
   description:
     'Validate Dominican Republic e-CF invoice XML against official DGII XSD schemas. Highlights breaking errors, math discrepancies, and conditional warnings with human-readable messages.',
