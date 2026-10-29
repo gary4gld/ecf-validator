@@ -199,6 +199,83 @@ function issuesToJson(issues: ValidationIssue[]): string {
   )
 }
 
+/**
+ * Reusable info panel — Acerca / Privacidad / Términos. Opened from the header.
+ * Designed to hold more surfaces later (Q&A, usage notes, API terms).
+ */
+function AboutPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  if (!open) return null
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-6"
+      style={{ background: 'rgba(0,0,0,0.65)' }}
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Acerca, privacidad y términos"
+    >
+      <div
+        className="w-full max-w-lg rounded-2xl my-6"
+        style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="flex items-center justify-between px-5 py-3"
+          style={{ borderBottom: '1px solid var(--border)' }}
+        >
+          <p className="text-sm font-medium text-gray-200">Acerca · Privacidad · Términos</p>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="text-gray-500 hover:text-white transition-colors text-xl leading-none"
+          >
+            ×
+          </button>
+        </div>
+        <div className="px-5 py-4 space-y-5 text-sm text-gray-400 leading-relaxed">
+          <section>
+            <h2 className="text-gray-200 font-medium mb-1.5">Acerca</h2>
+            <p>
+              ECF XML Validator es una herramienta gratuita que valida XML de comprobantes
+              fiscales electrónicos (e-CF) de la DGII (República Dominicana) contra los esquemas
+              XSD oficiales y las reglas del Formato, antes de enviarlos. La validación ocurre
+              completamente en tu navegador.
+            </p>
+          </section>
+          <section>
+            <h2 className="text-gray-200 font-medium mb-1.5">Privacidad</h2>
+            <p>
+              La factura se valida localmente en tu navegador y no se almacena. Lo único que sale
+              de tu navegador son los números de RNC (emisor y comprador): se envían al servidor de
+              esta herramienta, que los consulta en un servicio de registro de contribuyentes de la
+              DGII para verificar su estado. El resto del XML nunca se transmite ni se guarda.
+            </p>
+          </section>
+          <section>
+            <h2 className="text-gray-200 font-medium mb-1.5">Términos de uso</h2>
+            <p>
+              Esta herramienta se ofrece «tal cual», sin garantías de ningún tipo. Es una ayuda de
+              desarrollo y verificación previa: no sustituye la validación oficial de la DGII ni
+              garantiza que un e-CF sea aceptado. Verifica siempre con los canales oficiales antes
+              de enviar. El servicio puede cambiar, limitarse o descontinuarse en cualquier momento.
+              Úsala bajo tu propia responsabilidad.
+            </p>
+          </section>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /** Right-hand error panel — scrollable, sticky on desktop. */
 function ErrorPanel({
   issues,
@@ -394,6 +471,7 @@ export default function ValidatorPage() {
   const [showFloatingReset, setShowFloatingReset] = useState(false)
   const [hiddenSeverities, setHiddenSeverities] = useState<Set<Severity>>(new Set())
   const [legendOpen, setLegendOpen] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
 
   const toggleSeverity = (sev: Severity) =>
     setHiddenSeverities((prev) => {
@@ -640,15 +718,24 @@ export default function ValidatorPage() {
           <span className="font-semibold text-white text-sm">ECF XML Validator</span>
           <span className="text-[11px] text-gray-500 tracking-wide" style={{ fontFamily: 'var(--font-mono), monospace' }}>v1.0</span>
         </div>
-        <a
-          href="https://github.com/gary4gld/ecf-validator"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-gray-500 hover:text-white transition-colors"
-          aria-label="Repositorio en GitHub"
-        >
-          <GitHubIcon />
-        </a>
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => setAboutOpen(true)}
+            className="text-xs text-gray-500 hover:text-white transition-colors"
+          >
+            Acerca
+          </button>
+          <a
+            href="https://github.com/gary4gld/ecf-validator"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-500 hover:text-white transition-colors"
+            aria-label="Repositorio en GitHub"
+          >
+            <GitHubIcon />
+          </a>
+        </div>
       </header>
 
       {/* ── Main ── */}
@@ -658,9 +745,19 @@ export default function ValidatorPage() {
           /* ──────── Input state ──────── */
           <div className="max-w-3xl mx-auto">
             <h1 className="text-2xl font-semibold text-white mb-1">Valida tu XML e-CF</h1>
-            <p className="text-gray-400 text-sm mb-8 leading-relaxed">
+            <p className="text-gray-400 text-sm mb-2 leading-relaxed">
               Pega o carga un XML de factura electrónica para verificarlo contra los esquemas XSD
               oficiales de la DGII.
+            </p>
+            <p className="text-xs text-gray-600 mb-8">
+              Tu XML se valida en tu navegador y no se almacena.{' '}
+              <button
+                type="button"
+                onClick={() => setAboutOpen(true)}
+                className="text-gray-500 hover:text-gray-300 underline underline-offset-2"
+              >
+                Más info
+              </button>
             </p>
 
             {/* Mode tabs */}
@@ -941,8 +1038,16 @@ export default function ValidatorPage() {
         style={{ borderColor: 'var(--border)' }}
       >
         <span>ECF XML Validator — Gary De la Cruz</span>
-        <span>Free to use</span>
+        <button
+          type="button"
+          onClick={() => setAboutOpen(true)}
+          className="hover:text-gray-300 transition-colors"
+        >
+          Free to use · Términos
+        </button>
       </footer>
+
+      <AboutPanel open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>
   )
 }
