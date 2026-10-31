@@ -92,9 +92,9 @@ function XmlLineRow({
           minWidth: '48px',
           textAlign: 'right',
           paddingRight: '16px',
-          color: line.severity ? SEV[line.severity].color : '#484f58',
+          color: line.severity ? SEV[line.severity].color : '#7d8590',
           fontSize: '11px',
-          opacity: line.severity ? 0.85 : 0.45,
+          opacity: line.severity ? 0.85 : 1,
           userSelect: 'none',
           paddingTop: '1px',
         }}
@@ -155,7 +155,7 @@ function ErrorCard({
       </p>
 
       {/* Line reference */}
-      <p className="text-[10px] text-gray-600">
+      <p className="text-[11px] text-gray-400">
         {issue.line != null ? `línea ${issue.line}` : 'documento'}
       </p>
     </div>
@@ -236,7 +236,7 @@ function AboutPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
-            className="text-gray-500 hover:text-white transition-colors text-xl leading-none"
+            className="text-gray-400 hover:text-white transition-colors text-xl leading-none"
           >
             ×
           </button>
@@ -331,7 +331,7 @@ function ErrorPanel({
           <CheckIcon />
         </div>
         <p className="text-sm font-medium text-emerald-400 mb-1">Sin problemas</p>
-        <p className="text-xs text-gray-500">No se encontraron errores en el XML.</p>
+        <p className="text-xs text-gray-400">No se encontraron errores en el XML.</p>
       </div>
     )
   }
@@ -430,7 +430,7 @@ function ErrorPanel({
               <span className="text-[11px] uppercase tracking-wide font-medium text-gray-300">
                 Consideraciones
               </span>
-              <span className="ml-auto text-[11px] text-gray-500">
+              <span className="ml-auto text-[11px] text-gray-400">
                 {advisories.length} · no afecta la validez
               </span>
             </button>
@@ -716,13 +716,13 @@ export default function ValidatorPage() {
       >
         <div className="flex items-center gap-3">
           <span className="font-semibold text-white text-sm">ECF XML Validator</span>
-          <span className="text-[11px] text-gray-500 tracking-wide" style={{ fontFamily: 'var(--font-mono), monospace' }}>v1.0</span>
+          <span className="text-[11px] text-gray-400 tracking-wide" style={{ fontFamily: 'var(--font-mono), monospace' }}>v1.0</span>
         </div>
         <div className="flex items-center gap-4">
           <button
             type="button"
             onClick={() => setAboutOpen(true)}
-            className="text-xs text-gray-500 hover:text-white transition-colors"
+            className="text-xs text-gray-400 hover:text-white transition-colors"
           >
             Acerca
           </button>
@@ -730,7 +730,7 @@ export default function ValidatorPage() {
             href="https://github.com/gary4gld/ecf-validator"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-gray-500 hover:text-white transition-colors"
+            className="text-gray-400 hover:text-white transition-colors"
             aria-label="Repositorio en GitHub"
           >
             <GitHubIcon />
@@ -749,12 +749,12 @@ export default function ValidatorPage() {
               Pega o carga un XML de factura electrónica para verificarlo contra los esquemas XSD
               oficiales de la DGII.
             </p>
-            <p className="text-xs text-gray-600 mb-8">
+            <p className="text-xs text-gray-400 mb-8">
               Tu XML se valida en tu navegador y no se almacena.{' '}
               <button
                 type="button"
                 onClick={() => setAboutOpen(true)}
-                className="text-gray-500 hover:text-gray-300 underline underline-offset-2"
+                className="text-gray-400 hover:text-gray-300 underline underline-offset-2"
               >
                 Más info
               </button>
@@ -770,7 +770,7 @@ export default function ValidatorPage() {
                   key={m}
                   onClick={() => setMode(m)}
                   className={`text-sm px-4 py-1.5 rounded-md transition-colors ${
-                    mode === m ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'
+                    mode === m ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-gray-300'
                   }`}
                 >
                   {m === 'paste' ? 'Pegar XML' : 'Cargar archivo'}
@@ -803,13 +803,13 @@ export default function ValidatorPage() {
                   background: isDragging ? 'rgba(96,165,250,0.04)' : 'var(--bg-surface)',
                 }}
               >
-                <span className="text-gray-600"><UploadIcon /></span>
+                <span className="text-gray-400"><UploadIcon /></span>
                 <div className="text-center">
                   <p className="text-sm text-gray-400">
                     Arrastra tu archivo .xml aquí o{' '}
                     <span className="text-blue-400">haz clic para explorar</span>
                   </p>
-                  <p className="text-xs text-gray-600 mt-1">Solo archivos .xml</p>
+                  <p className="text-xs text-gray-400 mt-1">Solo archivos .xml</p>
                 </div>
                 <input
                   ref={fileInputRef}
@@ -831,7 +831,7 @@ export default function ValidatorPage() {
               >
                 Validar
               </button>
-              <span className="text-xs text-gray-600">o prueba un ejemplo:</span>
+              <span className="text-xs text-gray-400">o prueba un ejemplo:</span>
               <div className="flex items-center gap-2 flex-wrap">
                 {SAMPLE_INVOICES.map((s) => (
                   <button
@@ -852,6 +852,8 @@ export default function ValidatorPage() {
           /* ──────── Results state ──────── */
           <div className="flex flex-col gap-4">
 
+            <h1 className="sr-only">Resultados de validación</h1>
+
             {/* Info bar */}
             <div
               className="flex items-center justify-between flex-wrap gap-3 rounded-xl px-5 py-3"
@@ -869,7 +871,7 @@ export default function ValidatorPage() {
                 </span>
                 <span className="text-gray-700">·</span>
                 {/* Line count */}
-                <span className="text-sm text-gray-500">{parsedXml.lines.length} líneas</span>
+                <span className="text-sm text-gray-400">{parsedXml.lines.length} líneas</span>
 
                 {/* Severity badges — only shown severities that have ≥ 1 issue */}
                 {structuralCount > 0 && (
@@ -934,7 +936,7 @@ export default function ValidatorPage() {
               <button
                 ref={topResetRef}
                 onClick={handleReset}
-                className="text-xs text-gray-500 hover:text-white transition-colors shrink-0"
+                className="text-xs text-gray-400 hover:text-white transition-colors shrink-0"
               >
                 ← Validar otro
               </button>
@@ -952,7 +954,7 @@ export default function ValidatorPage() {
                         <span className="w-2 h-2 rounded-full shrink-0" style={{ background: c.color }} />
                         <span className="text-xs">
                           <span className="font-medium capitalize" style={{ color: c.text }}>{c.labelS}</span>
-                          <span className="text-gray-500"> — {meaning}</span>
+                          <span className="text-gray-400"> — {meaning}</span>
                         </span>
                       </div>
                     )
@@ -972,6 +974,9 @@ export default function ValidatorPage() {
                 <div
                   ref={xmlContainerRef}
                   className="overflow-auto"
+                  tabIndex={0}
+                  role="region"
+                  aria-label="XML del documento"
                   style={{
                     background: '#0d1117',
                     fontFamily: 'var(--font-mono), monospace',
@@ -1034,7 +1039,7 @@ export default function ValidatorPage() {
 
       {/* ── Footer ── */}
       <footer
-        className="shrink-0 border-t px-6 py-4 text-xs text-gray-600 flex items-center justify-between flex-wrap gap-2"
+        className="shrink-0 border-t px-6 py-4 text-xs text-gray-400 flex items-center justify-between flex-wrap gap-2"
         style={{ borderColor: 'var(--border)' }}
       >
         <span>ECF XML Validator — Gary De la Cruz</span>

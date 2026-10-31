@@ -8,14 +8,16 @@
  * Colour assignments (hex values intentionally match the dark #0d1117 theme):
  *   Tags      #7dd3fc  sky-300
  *   Values    #86efac  green-300
- *   Comments  #6e7681  muted gray (italic)
- *   Decl/PI   #484f58  very muted gray
+ *   Comments  #99a1af  muted gray (italic)
+ *   Decl/PI   #8b949e  muted gray
+ *
+ * Grays chosen to clear WCAG AA (≥4.5:1) on the #0d1117 viewer background.
  */
 
 const TAG_COLOR  = '#7dd3fc'
 const VAL_COLOR  = '#86efac'
-const CMT_COLOR  = '#6e7681'
-const DECL_COLOR = '#484f58'
+const CMT_COLOR  = '#99a1af'
+const DECL_COLOR = '#8b949e'
 
 export function colorizeXmlLine(text: string): string {
   // Step 1: Escape HTML entities, then replace < and > with private-use
