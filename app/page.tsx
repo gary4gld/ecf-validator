@@ -92,9 +92,9 @@ function XmlLineRow({
           minWidth: '48px',
           textAlign: 'right',
           paddingRight: '16px',
-          color: line.severity ? SEV[line.severity].color : '#7d8590',
+          color: line.severity ? SEV[line.severity].text : '#7d8590',
           fontSize: '11px',
-          opacity: line.severity ? 0.85 : 1,
+          opacity: 1,
           userSelect: 'none',
           paddingTop: '1px',
         }}
