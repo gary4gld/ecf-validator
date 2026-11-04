@@ -42,4 +42,6 @@ Built by **Gary De la Cruz** — full-stack developer specializing in enterprise
 
 ## License
 
-Free to use. A formal license is being finalized.
+Source-available under the [PolyForm Noncommercial License 1.0.0](./LICENSE.md): free to read, study, modify, and share for **noncommercial** purposes; commercial use of the source is not granted. Using the hosted tool at [ecf-validator.garydelacruz.dev](https://ecf-validator.garydelacruz.dev) is free for everyone, including commercial users.
+
+Copyright © 2026 Gary De la Cruz.
