@@ -1,37 +1,16 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
-import { beautifyXml } from '@/lib/xml-beautifier'
-import { detectInvoiceType, hasSignature } from '@/lib/xml-parser'
-import { validate } from '@/lib/validators/validator'
-import type { ParsedXml, ValidationIssue, XmlLine, Severity } from '@/lib/types'
+import { buildParsed, runValidation } from '@/lib/run-validation'
+import type { ValidationIssue, Severity } from '@/lib/types'
 
-/**
- * Build a ParsedXml exactly the way app/page.tsx does, so tests exercise the
- * real pipeline (beautify -> detect type -> line map -> validate).
- */
-export function buildParsed(xml: string): ParsedXml {
-  const beautified = beautifyXml(xml)
-  const lines: XmlLine[] = beautified.split('\n').map((content, i) => ({
-    number: i + 1,
-    content,
-    severity: null,
-    issueId: null,
-  }))
-
-  return {
-    raw: xml,
-    beautified,
-    lines,
-    invoiceType: detectInvoiceType(xml),
-    hasSignature: hasSignature(xml),
-    issues: [],
-  }
-}
+// Re-exported from the shared pipeline so tests, the UI, and the API route all
+// build ParsedXml the same way (no drift).
+export { buildParsed }
 
 /** Convenience: parse + validate in one call, returns the issue list. */
 export function validateXml(xml: string): ValidationIssue[] {
-  return validate(buildParsed(xml))
+  return runValidation(xml)
 }
 
 export interface IssueQuery {
